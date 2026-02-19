@@ -11,8 +11,8 @@ supabase==2.3.4
 
 # HTTP & API
 requests==2.31.0
-httpx==0.26.0
 gunicorn==21.2.0
+# httpx - let supabase handle its own version
 
 # Chinese Language Processing
 pypinyin==0.50.0
