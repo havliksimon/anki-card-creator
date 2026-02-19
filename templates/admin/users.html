@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Users - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="card-header" style="padding: 0 0 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+    <h1>All Users</h1>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Admin</th>
+                <th>Joined</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user_data in users %}
+                <tr>
+                    <td>
+                        {% if user_data.telegram_username %}
+                            @{{ user_data.telegram_username }}
+                        {% else %}
+                            {{ user_data.email or user_data.id[:8] + '...' }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user_data.telegram_id %}
+                            <span style="color: var(--info);">Telegram</span>
+                        {% else %}
+                            <span style="color: var(--secondary);">Email</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user_data.is_active %}
+                            <span style="color: var(--secondary);">Active</span>
+                        {% else %}
+                            <span style="color: var(--warning);">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user_data.is_admin %}
+                            <span style="color: var(--primary-light);">Yes</span>
+                        {% else %}
+                            <span style="color: var(--text-muted);">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user_data.created_at[:10] if user_data.created_at else 'Unknown' }}</td>
+                    <td>
+                        {% if user_data.id != current_user.id %}
+                            <form method="POST" action="{{ url_for('admin.toggle_admin', user_id=user_data.id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-secondary btn-sm">
+                                    {% if user_data.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                </button>
+                            </form>
+                            {% if user_data.is_active %}
+                                <form method="POST" action="{{ url_for('admin.deactivate', user_id=user_data.id) }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger btn-sm">Deactivate</button>
+                                </form>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Help - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <h1 style="margin-bottom: 2rem;">Help & Documentation</h1>
+    
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">How to Use</h2>
+        
+        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">1. Adding Words</h3>
+        <p style="color: var(--text-secondary); line-height: 1.8;">
+            Go to the "Add Words" page and paste Chinese text. Our system will automatically extract all 
+            unique Chinese characters and generate flashcard data including pinyin, translations, and example sentences.
+        </p>
+        
+        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">2. Exporting to Anki</h3>
+        <p style="color: var(--text-secondary); line-height: 1.8;">
+            Once you have words in your dictionary, click "Export CSV" to download a file formatted for Anki import.
+            In Anki: File → Import → Select the CSV → Set field separator to Comma → Enable "Allow HTML in fields"
+        </p>
+        
+        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">3. Card Types</h3>
+        <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
+            <li><strong>Writing:</strong> See the character, write it down</li>
+            <li><strong>Reading:</strong> See pinyin, recall character and meaning</li>
+            <li><strong>Definition:</strong> See English, recall Chinese</li>
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">Features</h2>
+        
+        <div class="grid grid-2">
+            <div>
+                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">📊 Progress Tracking</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                    Track your HSK level progress and estimated text coverage.
+                </p>
+            </div>
+            <div>
+                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🔊 Audio</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                    Built-in text-to-speech for pronunciation practice.
+                </p>
+            </div>
+            <div>
+                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🖌 Stroke Order</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                    Visual stroke order GIFs for character writing practice.
+                </p>
+            </div>
+            <div>
+                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🤖 AI Examples</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                    AI-generated example sentences at appropriate HSK levels.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">Account</h2>
+        <p style="color: var(--text-secondary); line-height: 1.8;">
+            New accounts require admin approval before you can start using the app. 
+            You'll be notified via email once your account is approved. 
+            You can sign in using either email/password or Telegram.
+        </p>
+    </div>
+</div>
+{% endblock %}

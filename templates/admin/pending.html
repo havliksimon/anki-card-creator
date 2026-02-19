@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Pending Approvals - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="card-header" style="padding: 0 0 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+    <h1>Pending Approvals</h1>
+</div>
+
+{% if pending %}
+    <div class="card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Telegram</th>
+                    <th>Requested</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in pending %}
+                    <tr>
+                        <td>{{ item.user_id[:8] }}...</td>
+                        <td>{{ item.email or '-' }}</td>
+                        <td>
+                            {% if item.telegram_username %}
+                                @{{ item.telegram_username }}
+                            {% elif item.telegram_id %}
+                                ID: {{ item.telegram_id[:8] }}...
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ item.requested_at[:10] if item.requested_at else 'Unknown' }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('admin.approve', user_id=item.user_id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.reject', user_id=item.user_id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="card">
+        <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <h3 style="margin-bottom: 0.5rem;">All Caught Up!</h3>
+            <p style="color: var(--text-secondary);">No pending approvals at this time.</p>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

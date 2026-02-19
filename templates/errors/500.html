@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}Server Error - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 4rem 2rem;">
+    <div style="font-size: 6rem; margin-bottom: 1rem;">🔧</div>
+    <h1 style="font-size: 3rem; margin-bottom: 1rem;">500</h1>
+    <p style="color: var(--text-secondary); font-size: 1.25rem; margin-bottom: 2rem;">
+        Something went wrong on our end
+    </p>
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Go Home</a>
+</div>
+{% endblock %}

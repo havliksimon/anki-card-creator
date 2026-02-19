@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Statistics - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="card-header" style="padding: 0 0 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+    <h1>Detailed Statistics</h1>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Words</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in users_data %}
+                <tr>
+                    <td>#{{ loop.index }}</td>
+                    <td>{{ item.user.display_name }}</td>
+                    <td>
+                        {% if item.user.telegram_id %}
+                            <span style="color: var(--info);">Telegram</span>
+                        {% else %}
+                            <span style="color: var(--secondary);">Email</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-weight: 600; color: var(--primary-light);">{{ item.word_count }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

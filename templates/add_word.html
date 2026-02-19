@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Words - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <div class="card">
+        <div class="card-header">
+            <h1 class="card-title">Add Chinese Words</h1>
+        </div>
+        
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            Enter Chinese text below. We'll extract all Chinese characters and generate flashcard data for each unique word.
+        </p>
+        
+        <form method="POST" action="{{ url_for('main.add_word') }}">
+            <div class="form-group">
+                <label class="form-label">Chinese Text</label>
+                <textarea name="text" class="form-input" rows="5" required 
+                    placeholder="Enter Chinese text here... 你好世界"></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                Extract & Add Words
+            </button>
+        </form>
+    </div>
+    
+    <div class="card">
+        <h3 style="margin-bottom: 1rem;">Tips</h3>
+        <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
+            <li>You can paste entire paragraphs - we'll extract all unique Chinese words</li>
+            <li>Each unique character combination will only be added once</li>
+            <li>Existing words in your dictionary will be skipped</li>
+            <li>Data generation may take a few moments for new words</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

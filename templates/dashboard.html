@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 0.5rem;">Dashboard</h1>
+<p style="color: var(--text-secondary); margin-bottom: 2rem;">Welcome back, {{ current_user.display_name }}!</p>
+
+<!-- Stats -->
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-value">{{ stats.total_words }}</div>
+        <div class="stat-label">Total Words</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ "%.0f"|format(coverage) }}%</div>
+        <div class="stat-label">Text Coverage</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">HSK{{ hsk_progress.current_level or '?' }}</div>
+        <div class="stat-label">Current Level</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ "%.0f"|format(hsk_progress.progress_hsk6) }}%</div>
+        <div class="stat-label">To HSK6</div>
+    </div>
+</div>
+
+<!-- Progress Bars -->
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">{% if hsk_progress.current_level == 0 %}Progress to HSK1{% else %}Progress to HSK{{ hsk_progress.next_level }}{% endif %}</h3>
+        </div>
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>{% if hsk_progress.current_level == 0 %}Pre-HSK1{% else %}HSK{{ hsk_progress.current_level }}{% endif %}</span>
+                <span>{{ hsk_progress.words_achieved_next }}/{{ hsk_progress.words_needed_next }} words</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ hsk_progress.progress_next }}%"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Progress to HSK6</h3>
+        </div>
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>Overall</span>
+                <span>{{ stats.total_words }}/{{ hsk_progress.total_hsk6 }} words</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ hsk_progress.progress_hsk6 }}%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Words -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Recent Words</h3>
+        <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    
+    {% if words %}
+        <div class="word-list">
+            {% for word in words %}
+                <a href="{{ url_for('main.word_detail', character=word.character) }}" class="word-tag">
+                    {{ word.character }}
+                </a>
+            {% endfor %}
+        </div>
+        {% if total_count > 10 %}
+            <p style="text-align: center; margin-top: 1rem; color: var(--text-secondary);">
+                And {{ total_count - 10 }} more...
+            </p>
+        {% endif %}
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📚</div>
+            <p>No words yet. Start by adding some Chinese characters!</p>
+            <a href="{{ url_for('main.add_word') }}" class="btn btn-primary mt-2">Add Words</a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Quick Actions -->
+<div class="grid grid-3">
+    <a href="{{ url_for('main.add_word') }}" class="card" style="text-decoration: none; color: inherit; text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">➕</div>
+        <h4>Add Words</h4>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">Add new Chinese characters</p>
+    </a>
+    
+    <a href="{{ url_for('main.dictionary') }}" class="card" style="text-decoration: none; color: inherit; text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📖</div>
+        <h4>Dictionary</h4>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">View all saved words</p>
+    </a>
+    
+    <a href="{{ url_for('main.export_csv') }}" class="card" style="text-decoration: none; color: inherit; text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📥</div>
+        <h4>Export</h4>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">Download for Anki</p>
+    </a>
+</div>
+{% endblock %}

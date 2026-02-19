@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero">
+    <h1 class="hero-title">Master Chinese with Anki</h1>
+    <p class="hero-subtitle">
+        Extract Chinese characters from text or images, automatically generate flashcard data with 
+        pinyin, translations, example sentences, and export to Anki.
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+        <a href="{{ url_for('auth.register') }}" class="btn btn-primary" style="font-size: 1.1rem; padding: 1rem 2rem;">
+            Get Started Free
+        </a>
+        <a href="{{ url_for('main.help_page') }}" class="btn btn-secondary" style="font-size: 1.1rem; padding: 1rem 2rem;">
+            Learn More
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-3" style="margin-top: 2rem;">
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+        <h3 style="margin-bottom: 0.5rem;">Extract from Images</h3>
+        <p style="color: var(--text-secondary);">
+            Upload photos with Chinese text. Our OCR will extract the characters automatically.
+        </p>
+    </div>
+    
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">🔊</div>
+        <h3 style="margin-bottom: 0.5rem;">Audio Pronunciation</h3>
+        <p style="color: var(--text-secondary);">
+            Get audio pronunciation for every word and example sentence.
+        </p>
+    </div>
+    
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📤</div>
+        <h3 style="margin-bottom: 0.5rem;">Export to Anki</h3>
+        <p style="color: var(--text-secondary);">
+            Download your words as CSV with all data formatted for Anki import.
+        </p>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 3rem; text-align: center;">
+    <h2 style="margin-bottom: 1rem;">Features</h2>
+    <div class="grid grid-2" style="text-align: left;">
+        <div>
+            <ul style="list-style: none; line-height: 2;">
+                <li>✅ Tone-colored pinyin</li>
+                <li>✅ AI-generated example sentences</li>
+                <li>✅ Stroke order GIFs</li>
+                <li>✅ Exemplary images</li>
+            </ul>
+        </div>
+        <div>
+            <ul style="list-style: none; line-height: 2;">
+                <li>✅ Personal dictionary</li>
+                <li>✅ Progress tracking</li>
+                <li>✅ HSK level estimation</li>
+                <li>✅ Text coverage stats</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

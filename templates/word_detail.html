@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ word.character }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div>
+            <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">{{ word.character }}</h1>
+            <p style="font-size: 1.25rem; color: var(--text-secondary);">{{ word.pinyin|safe }}</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+            {% if word.pronunciation %}
+                <button onclick="document.getElementById('audio-main').play()" class="btn btn-secondary">
+                    🔊 Play
+                </button>
+                <audio id="audio-main" src="{{ word.pronunciation }}"></audio>
+            {% endif %}
+            <form method="POST" action="{{ url_for('main.delete_word', character=word.character) }}" 
+                  onsubmit="return confirm('Delete this word?');">
+                <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+        </div>
+    </div>
+    
+    {% if word.translation %}
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase; margin-bottom: 0.5rem;">Translation</h3>
+            <p style="font-size: 1.1rem;">{{ word.translation }}</p>
+        </div>
+    {% endif %}
+    
+    {% if word.meaning %}
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase; margin-bottom: 0.5rem;">Meaning</h3>
+            <p>{{ word.meaning }}</p>
+        </div>
+    {% endif %}
+</div>
+
+{% if word.exemplary_image %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Example Image</h3>
+        </div>
+        <img src="{{ word.exemplary_image }}" alt="{{ word.character }}" style="max-width: 100%; border-radius: var(--radius);">
+    </div>
+{% endif %}
+
+{% if word.anki_usage_examples %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Example Sentences</h3>
+        </div>
+        <div>{{ word.anki_usage_examples|safe }}</div>
+    </div>
+{% endif %}
+
+{% if word.stroke_gifs %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Stroke Order</h3>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            {% for gif in word.stroke_gifs.split(', ') %}
+                {% if gif %}
+                    <img src="{{ gif }}" alt="Stroke {{ loop.index }}" style="max-width: 120px;">
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+
+<div style="text-align: center; margin-top: 2rem;">
+    <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary">← Back to Dictionary</a>
+</div>
+{% endblock %}

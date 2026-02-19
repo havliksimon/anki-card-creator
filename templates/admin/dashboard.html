@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard - {{ app_name }}{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 0.5rem;">Admin Dashboard</h1>
+<p style="color: var(--text-secondary); margin-bottom: 2rem;">Manage users and system settings</p>
+
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-value">{{ stats.total_users }}</div>
+        <div class="stat-label">Total Users</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ stats.active_users if stats.active_users else stats.total_users }}</div>
+        <div class="stat-label">Active Users</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ pending|length }}</div>
+        <div class="stat-label">Pending Approval</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value">{{ stats.total_words }}</div>
+        <div class="stat-label">Total Words</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Pending Approvals</h3>
+        <a href="{{ url_for('admin.pending') }}" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    
+    {% if pending %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Requested</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in pending[:5] %}
+                    <tr>
+                        <td>
+                            {% if item.telegram_username %}
+                                @{{ item.telegram_username }}
+                            {% else %}
+                                {{ item.email or 'Unknown' }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.telegram_id %}
+                                <span style="color: var(--info);">Telegram</span>
+                            {% else %}
+                                <span style="color: var(--secondary);">Email</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.requested_at[:10] if item.requested_at else 'Unknown' }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('admin.approve', user_id=item.user_id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.reject', user_id=item.user_id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="empty-state">
+            <p>No pending approvals</p>
+        </div>
+    {% endif %}
+</div>
+
+<div class="grid grid-2">
+    <a href="{{ url_for('admin.users') }}" class="card" style="text-decoration: none; color: inherit; text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">👥</div>
+        <h4>Manage Users</h4>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">View and manage all users</p>
+    </a>
+    
+    <a href="{{ url_for('admin.stats') }}" class="card" style="text-decoration: none; color: inherit; text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+        <h4>Statistics</h4>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">View detailed usage stats</p>
+    </a>
+</div>
+{% endblock %}

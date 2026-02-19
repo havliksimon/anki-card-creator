@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <div class="card">
+        <div class="card-header">
+            <h1 class="card-title">Your Profile</h1>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.25rem;">Display Name</label>
+            <p style="font-size: 1.25rem;">{{ current_user.display_name }}</p>
+        </div>
+        
+        {% if current_user.email %}
+            <div style="margin-bottom: 1.5rem;">
+                <label style="color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.25rem;">Email</label>
+                <p>{{ current_user.email }}</p>
+            </div>
+        {% endif %}
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.25rem;">Account Type</label>
+            <p>
+                {% if current_user.is_admin_user %}
+                    <span style="color: var(--primary-light);">Administrator</span>
+                {% else %}
+                    Standard User
+                {% endif %}
+            </p>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.25rem;">Words Saved</label>
+            <p style="font-size: 1.5rem; font-weight: 600; color: var(--primary-light);">{{ stats.total_words }}</p>
+        </div>
+        
+        <div>
+            <label style="color: var(--text-secondary); font-size: 0.875rem; display: block; margin-bottom: 0.25rem;">Member Since</label>
+            <p>{{ current_user.created_at[:10] if current_user.created_at else 'Unknown' }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
