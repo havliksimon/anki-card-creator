@@ -91,14 +91,13 @@ def create_admin_user(app):
     
     if not existing:
         try:
-            user_data = {
-                'id': User.generate_id(),
-                'email': admin_email,
-                'password_hash': User.hash_password(admin_password),
-                'is_active': True,
-                'is_admin': True
-            }
-            db.create_user(user_data)
+            db.create_user(
+                user_id=User.generate_id(),
+                email=admin_email,
+                password_hash=User.hash_password(admin_password),
+                is_active=True,
+                is_admin=True
+            )
             app.logger.info(f'Admin user created: {admin_email}')
         except Exception as e:
             app.logger.error(f'Failed to create admin user: {e}')
