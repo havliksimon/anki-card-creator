@@ -157,3 +157,10 @@ geckodriver
 geckodriver.log
 *.xpi
 old_anki_card_creator/
+
+# Migration data (local only - contains actual database content)
+migration_data/
+migration_data_optimized/
+*.sql
+!CREATE_TABLES.sql
+!SUPABASE_SETUP.sql
