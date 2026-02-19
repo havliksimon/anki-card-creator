@@ -5,13 +5,18 @@ import re
 from typing import List, Dict, Optional
 from urllib.parse import quote
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+# Selenium is optional - only needed for scraping features
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.firefox.service import Service
+    from selenium.webdriver.firefox.options import Options
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    SELENIUM_AVAILABLE = False
 
 
 class ChineseScraper:
@@ -23,10 +28,18 @@ class ChineseScraper:
         self.firefox_binary = "/home/simon/py/nmy/anki_card_creator (Copy)/app/firefox"
         self.geckodriver_path = "/home/simon/py/nmy/anki_card_creator (Copy)/app/geckodriver"
         self.extension_path = "/home/simon/py/nmy/anki_card_creator (Copy)/app/i_dont_care_about_cookies-3.4.8.xpi"
+        
+        if not SELENIUM_AVAILABLE:
+            print("Warning: Selenium not available. Scraping features disabled.")
+            return
+            
         self._init_driver()
     
     def _init_driver(self):
         """Initialize Firefox WebDriver."""
+        if not SELENIUM_AVAILABLE:
+            return
+            
         options = Options()
         options.binary_location = self.firefox_binary
         options.set_preference("dom.webdriver.enabled", False)
@@ -48,6 +61,9 @@ class ChineseScraper:
     
     def scrape_mdbg(self, character: str) -> Dict:
         """Scrape word data from MDBG."""
+        if not SELENIUM_AVAILABLE:
+            return {}
+            
         try:
             url = f"https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={quote(character)}"
             self.driver.get(url)
@@ -89,6 +105,9 @@ class ChineseScraper:
     
     def scrape_chinese_boost(self, character: str) -> List[Dict]:
         """Scrape example sentences from Chinese Boost."""
+        if not SELENIUM_AVAILABLE:
+            return []
+            
         try:
             url = f"https://www.chineseboost.com/chinese-example-sentences?query={quote(character)}"
             self.driver.get(url)
@@ -123,6 +142,9 @@ class ChineseScraper:
     
     def scrape_stroke_order(self, character: str) -> List[str]:
         """Scrape stroke order GIFs from Written Chinese."""
+        if not SELENIUM_AVAILABLE:
+            return []
+            
         try:
             self.driver.get("https://dictionary.writtenchinese.com")
             
@@ -156,7 +178,7 @@ class ChineseScraper:
     
     def close(self):
         """Close the WebDriver."""
-        if self.driver:
+        if SELENIUM_AVAILABLE and self.driver:
             self.driver.quit()
             self.driver = None
     
