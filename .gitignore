@@ -156,3 +156,4 @@ firefox/
 geckodriver
 geckodriver.log
 *.xpi
+old_anki_card_creator/

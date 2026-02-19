@@ -25,9 +25,31 @@ class ChineseScraper:
     def __init__(self):
         self.driver = None
         self.wait = None
-        self.firefox_binary = "/home/simon/py/nmy/anki_card_creator (Copy)/app/firefox"
-        self.geckodriver_path = "/home/simon/py/nmy/anki_card_creator (Copy)/app/geckodriver"
-        self.extension_path = "/home/simon/py/nmy/anki_card_creator (Copy)/app/i_dont_care_about_cookies-3.4.8.xpi"
+        
+        # Detect environment and set paths accordingly
+        # Docker/Koyeb paths (priority)
+        if os.path.exists("/usr/bin/firefox"):
+            self.firefox_binary = "/usr/bin/firefox"
+            self.geckodriver_path = "/usr/local/bin/geckodriver"
+        # Local development paths (Linux)
+        elif os.path.exists("./old_anki_card_creator/server/firefox"):
+            self.firefox_binary = "./old_anki_card_creator/server/firefox"
+            self.geckodriver_path = "./old_anki_card_creator/server/geckodriver"
+        # Fallback for local dev with system firefox
+        elif os.path.exists("/usr/bin/firefox-esr"):
+            self.firefox_binary = "/usr/bin/firefox-esr"
+            self.geckodriver_path = "./old_anki_card_creator/server/geckodriver"
+        else:
+            self.firefox_binary = None
+            self.geckodriver_path = None
+            
+        # Extension path
+        if os.path.exists("/app/extension.xpi"):
+            self.extension_path = "/app/extension.xpi"
+        elif os.path.exists("./old_anki_card_creator/server/i_dont_care_about_cookies-3.4.8.xpi"):
+            self.extension_path = "./old_anki_card_creator/server/i_dont_care_about_cookies-3.4.8.xpi"
+        else:
+            self.extension_path = None
         
         if not SELENIUM_AVAILABLE:
             print("Warning: Selenium not available. Scraping features disabled.")
