@@ -30,23 +30,17 @@ class ChineseScraper:
         # Check both firefox AND geckodriver exist together
         
         # Docker/Koyeb paths (priority when geckodriver present)
-        if os.path.exists("/usr/bin/firefox") and os.path.exists("/usr/local/bin/geckodriver"):
-            self.firefox_binary = "/usr/bin/firefox"
-            self.geckodriver_path = "/usr/local/bin/geckodriver"
-        # Local development with bundled binaries
-        elif os.path.exists("./old_anki_card_creator/server/firefox") and \
-             os.path.exists("./old_anki_card_creator/server/geckodriver"):
-            self.firefox_binary = os.path.abspath("./old_anki_card_creator/server/firefox")
-            self.geckodriver_path = os.path.abspath("./old_anki_card_creator/server/geckodriver")
-        # System firefox with local geckodriver
-        elif os.path.exists("/usr/bin/firefox") and \
-             os.path.exists("./old_anki_card_creator/server/geckodriver"):
-            self.firefox_binary = "/usr/bin/firefox"
-            self.geckodriver_path = os.path.abspath("./old_anki_card_creator/server/geckodriver")
-        # Fallback for docker with firefox-esr
-        elif os.path.exists("/usr/bin/firefox-esr") and os.path.exists("/usr/local/bin/geckodriver"):
+        if os.path.exists("/usr/bin/firefox-esr") and os.path.exists("/usr/local/bin/geckodriver"):
             self.firefox_binary = "/usr/bin/firefox-esr"
             self.geckodriver_path = "/usr/local/bin/geckodriver"
+        # Local development with system firefox + bin/ geckodriver
+        elif os.path.exists("/usr/bin/firefox") and os.path.exists("./bin/geckodriver"):
+            self.firefox_binary = "/usr/bin/firefox"
+            self.geckodriver_path = os.path.abspath("./bin/geckodriver")
+        # Fallback for system firefox-esr with local geckodriver
+        elif os.path.exists("/usr/bin/firefox-esr") and os.path.exists("./bin/geckodriver"):
+            self.firefox_binary = "/usr/bin/firefox-esr"
+            self.geckodriver_path = os.path.abspath("./bin/geckodriver")
         else:
             self.firefox_binary = None
             self.geckodriver_path = None
@@ -54,8 +48,8 @@ class ChineseScraper:
         # Extension path
         if os.path.exists("/app/extension.xpi"):
             self.extension_path = "/app/extension.xpi"
-        elif os.path.exists("./old_anki_card_creator/server/i_dont_care_about_cookies-3.4.8.xpi"):
-            self.extension_path = os.path.abspath("./old_anki_card_creator/server/i_dont_care_about_cookies-3.4.8.xpi")
+        elif os.path.exists("./bin/extension.xpi"):
+            self.extension_path = os.path.abspath("./bin/extension.xpi")
         else:
             self.extension_path = None
         

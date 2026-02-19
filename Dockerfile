@@ -46,12 +46,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy geckodriver from old_anki_card_creator
-COPY old_anki_card_creator/server/geckodriver /usr/local/bin/geckodriver
+# Copy geckodriver and extension from bin/ folder
+COPY bin/geckodriver /usr/local/bin/geckodriver
 RUN chmod +x /usr/local/bin/geckodriver
 
-# Copy cookie blocker extension
-COPY old_anki_card_creator/server/i_dont_care_about_cookies-3.4.8.xpi /app/extension.xpi
+COPY bin/extension.xpi /app/extension.xpi
 
 # Copy application code
 COPY . .

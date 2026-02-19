@@ -158,6 +158,10 @@ geckodriver.log
 *.xpi
 old_anki_card_creator/
 
+# But allow in bin/ folder for Docker build
+!bin/geckodriver
+!bin/extension.xpi
+
 # Migration data (local only - contains actual database content)
 migration_data/
 migration_data_optimized/
