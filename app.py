@@ -83,6 +83,7 @@ def create_admin_user(app):
     """Create admin user if configured."""
     admin_email = app.config.get('ADMIN_EMAIL')
     admin_password = app.config.get('ADMIN_PASSWORD')
+    admin_telegram_id = app.config.get('TELEGRAM_ADMIN_ID')
     
     if not admin_email or not admin_password:
         return
@@ -95,10 +96,12 @@ def create_admin_user(app):
                 user_id=User.generate_id(),
                 email=admin_email,
                 password_hash=User.hash_password(admin_password),
+                telegram_id=str(admin_telegram_id) if admin_telegram_id else None,
+                telegram_username=None,
                 is_active=True,
                 is_admin=True
             )
-            app.logger.info(f'Admin user created: {admin_email}')
+            app.logger.info(f'Admin user created: {admin_email} (Telegram: {admin_telegram_id})')
         except Exception as e:
             app.logger.error(f'Failed to create admin user: {e}')
 
