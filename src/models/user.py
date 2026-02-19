@@ -60,7 +60,8 @@ class User(UserMixin):
     @classmethod
     def get_by_id(cls, user_id: str) -> Optional['User']:
         """Get user by ID."""
-        user_data = db.get_user(user_id)
+        # Need to add get_user method to database
+        user_data = db.get_user_by_id(user_id)
         return cls(user_data) if user_data else None
     
     @classmethod
@@ -72,38 +73,60 @@ class User(UserMixin):
     @classmethod
     def get_by_telegram(cls, telegram_id: str) -> Optional['User']:
         """Get user by Telegram ID."""
-        user_data = db.get_user_by_telegram(telegram_id)
+        user_data = db.get_user_by_telegram_id(telegram_id)
         return cls(user_data) if user_data else None
     
     @classmethod
-    def create_email_user(cls, email: str, password: str) -> Optional['User']:
+    def create_email_user(cls, email: str, password: str, is_admin: bool = False) -> Optional['User']:
         """Create new email user."""
-        user_data = {
-            'id': cls.generate_id(),
-            'email': email,
-            'password_hash': cls.hash_password(password),
-            'is_active': False,
-            'is_admin': False
-        }
-        result = db.create_user(user_data)
-        if result:
-            db.add_pending_approval(result['id'])
-        return cls(result) if result else None
+        user_id = cls.generate_id()
+        result = db.create_user(
+            user_id=user_id,
+            email=email,
+            password_hash=cls.hash_password(password),
+            is_active=is_admin,  # Auto-activate if admin
+            is_admin=is_admin
+        )
+        if result and not is_admin:
+            # Add to pending approvals for regular users
+            db.create_pending_approval(user_id, email, cls.hash_password(password))
+        return cls.get_by_id(user_id) if result else None
     
     @classmethod
     def create_telegram_user(cls, telegram_id: str, telegram_username: str = None) -> Optional['User']:
         """Create new Telegram user."""
-        user_data = {
-            'id': cls.generate_id(),
-            'telegram_id': telegram_id,
-            'telegram_username': telegram_username,
-            'is_active': False,
-            'is_admin': False
-        }
-        result = db.create_user(user_data)
+        user_id = cls.generate_id()
+        result = db.create_user(
+            user_id=user_id,
+            email=None,
+            password_hash=None,
+            telegram_id=telegram_id,
+            telegram_username=telegram_username,
+            is_active=False,
+            is_admin=False
+        )
         if result:
-            db.add_pending_approval(result['id'])
-        return cls(result) if result else None
+            db.create_pending_approval(user_id, email=None, password_hash=None, 
+                                        telegram_id=telegram_id, telegram_username=telegram_username)
+        return cls.get_by_id(user_id) if result else None
+    
+    def link_telegram(self, telegram_id: str, telegram_username: str = None) -> bool:
+        """Link Telegram account to existing user."""
+        self.telegram_id = telegram_id
+        self.telegram_username = telegram_username
+        return db.update_user(self.id, {
+            'telegram_id': telegram_id,
+            'telegram_username': telegram_username
+        })
+    
+    def unlink_telegram(self) -> bool:
+        """Unlink Telegram account."""
+        self.telegram_id = None
+        self.telegram_username = None
+        return db.update_user(self.id, {
+            'telegram_id': None,
+            'telegram_username': None
+        })
     
     def update(self, **kwargs) -> bool:
         """Update user fields."""
@@ -113,7 +136,6 @@ class User(UserMixin):
         """Activate user account."""
         self.is_active_user = True
         db.update_user(self.id, {'is_active': True})
-        db.remove_pending_approval(self.id)
         return True
     
     def deactivate(self) -> bool:

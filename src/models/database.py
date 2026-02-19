@@ -158,6 +158,39 @@ class Database:
                                                'password_hash', 'is_active', 'is_admin', 'created_at', 'last_login'])
             return None
     
+    def get_user_by_id(self, user_id: str) -> Optional[Dict]:
+        """Get user by ID."""
+        if self._client:
+            response = self._client.get(f"/users?id=eq.{user_id}&limit=1")
+            data = response.json()
+            return data[0] if data else None
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+            row = c.fetchone()
+            conn.close()
+            if row:
+                return self._row_to_dict(row, ['id', 'email', 'telegram_id', 'telegram_username',
+                                               'password_hash', 'is_active', 'is_admin', 'created_at', 'last_login'])
+            return None
+    
+    def get_user_stats(self, user_id: str) -> Dict:
+        """Get user statistics."""
+        if self._client:
+            try:
+                words = self._client.get(f"/words?user_id=eq.{user_id}&select=id").json()
+                return {"word_count": len(words)}
+            except:
+                return {"word_count": 0}
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM words WHERE user_id = ?", (user_id,))
+            count = c.fetchone()[0]
+            conn.close()
+            return {"word_count": count}
+    
     def create_user(self, user_id: str, email: str, password_hash: str, 
                     telegram_id: str = None, telegram_username: str = None,
                     is_active: bool = False, is_admin: bool = False) -> bool:
