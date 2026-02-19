@@ -223,16 +223,25 @@ class Database:
             finally:
                 conn.close()
     
+    def _serialize_for_json(self, obj):
+        """Convert datetime and other objects to JSON-serializable format."""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return obj
+    
     def update_user(self, user_id: str, updates: Dict) -> bool:
         """Update user fields."""
+        # Convert datetime objects to ISO format strings
+        serialized_updates = {k: self._serialize_for_json(v) for k, v in updates.items()}
+        
         if self._client:
-            response = self._client.patch(f"/users?id=eq.{user_id}", json=updates)
+            response = self._client.patch(f"/users?id=eq.{user_id}", json=serialized_updates)
             return response.status_code == 204
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
-            values = list(updates.values()) + [user_id]
+            set_clause = ", ".join([f"{k} = ?" for k in serialized_updates.keys()])
+            values = list(serialized_updates.values()) + [user_id]
             c.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
             conn.commit()
             conn.close()
