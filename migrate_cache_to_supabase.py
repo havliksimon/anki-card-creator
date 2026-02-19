@@ -147,10 +147,12 @@ def main():
     print(f"  - TTS cache: {tts_count} items")
     print(f"  - Stroke GIFs: {stroke_count} items")
     
-    confirm = input("\nProceed with migration? (yes/no): ")
-    if confirm.lower() != 'yes':
-        print("Migration cancelled")
-        return
+    # Auto-confirm if environment variable set
+    if os.environ.get('AUTO_MIGRATE') != '1':
+        confirm = input("\nProceed with migration? (yes/no): ")
+        if confirm.lower() != 'yes':
+            print("Migration cancelled")
+            return
     
     # Migrate TTS cache
     tts_migrated, tts_failed = migrate_tts_cache()
