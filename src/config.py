@@ -35,7 +35,8 @@ class Config:
     DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
     UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY')
     GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_VISION_API_KEY')
-    TTS_API_URL = os.environ.get('TTS_API_URL')
+    # TTS API URL - defaults to local API endpoint, override for production domain
+    TTS_API_URL = os.environ.get('TTS_API_URL', '/api/tts')
     
     # Admin
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@example.com')
