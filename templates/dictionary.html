@@ -3,69 +3,141 @@
 {% block title %}Dictionary - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="card-header" style="padding: 0 0 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
-    <div>
-        <h1 style="margin-bottom: 0.25rem;">Dictionary</h1>
-        <p style="color: var(--text-secondary);">{{ total }} words saved</p>
-    </div>
-    <div style="display: flex; gap: 0.75rem;">
-        <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Words</a>
-        {% if words %}
-            <a href="{{ url_for('main.export_csv') }}" class="btn btn-secondary">Export CSV</a>
-        {% endif %}
+<!-- Deck Selector Bar -->
+<div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 1rem 0; margin-bottom: 2rem;">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <h2 style="margin: 0; font-size: 1.25rem;">📚 {{ deck_label or 'Main Deck' }}</h2>
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">(Deck {{ deck_number }})</span>
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">Switch Deck:</span>
+            {% for d in decks %}
+                {% set d_num = d.deck_number %}
+                <form method="POST" action="{{ url_for('main.switch_deck', deck_number=d_num) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-sm {% if deck_number == d_num %}btn-primary{% else %}btn-secondary{% endif %}">{{ d_num }}</button>
+                </form>
+            {% endfor %}
+            
+            <button onclick="document.getElementById('new-deck-modal').style.display='block'" class="btn btn-sm btn-success">+ New</button>
+        </div>
     </div>
 </div>
 
-{% if words %}
-    <div class="card">
-        <div class="word-list" style="padding: 1rem;">
-            {% for word in words %}
-                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-tertiary); border-radius: var(--radius);">
-                    <a href="{{ url_for('main.word_detail', character=word.character) }}" style="text-decoration: none; color: inherit; font-size: 1.5rem;">
-                        {{ word.character }}
-                    </a>
-                    <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
-                          onsubmit="return confirm('Delete {{ word.character }}?');" style="margin: 0;">
-                        <button type="submit" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.25rem; font-size: 1rem;">×</button>
-                    </form>
-                </div>
-            {% endfor %}
+<div class="container">
+    <div class="card-header" style="padding: 0 0 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;">
+        <div>
+            <h1 style="margin-bottom: 0.25rem;">Dictionary</h1>
+            <p style="color: var(--text-secondary);">{{ total }} words in current deck</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+            <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Words</a>
+            {% if words %}
+                <a href="{{ url_for('main.export_csv') }}" class="btn btn-secondary">Export CSV</a>
+            {% endif %}
         </div>
     </div>
-    
-    {% if total_pages > 1 %}
-        <div class="pagination">
-            {% if page > 1 %}
-                <a href="{{ url_for('main.dictionary', page=page-1) }}" class="page-link">← Previous</a>
-            {% endif %}
-            
-            {% for p in range(1, total_pages + 1) %}
-                {% if p == page %}
-                    <span class="page-link active">{{ p }}</span>
-                {% else %}
-                    <a href="{{ url_for('main.dictionary', page=p) }}" class="page-link">{{ p }}</a>
+
+    {% if words %}
+        <div class="card">
+            <div style="padding: 1rem;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">#</th>
+                            <th style="width: 100px;">Character</th>
+                            <th>Pinyin</th>
+                            <th>Translation</th>
+                            <th style="width: 150px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for word in words %}
+                        <tr>
+                            <td>{{ (page - 1) * 50 + loop.index }}</td>
+                            <td style="font-size: 1.5rem;">{{ word.character }}</td>
+                            <td>{{ word.pinyin|safe }}</td>
+                            <td>{{ word.translation[:60] }}{% if word.translation|length > 60 %}...{% endif %}</td>
+                            <td>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <a href="{{ url_for('main.word_detail', character=word.character) }}" class="btn btn-sm btn-primary">View</a>
+                                    <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
+                                          onsubmit="return confirm('Delete {{ word.character }}?');" style="margin: 0;">
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        {% if total_pages > 1 %}
+            <div class="pagination" style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 0.5rem;">
+                {% if page > 1 %}
+                    <a href="{{ url_for('main.dictionary', page=page-1) }}" class="btn btn-secondary">← Previous</a>
                 {% endif %}
-            {% endfor %}
-            
-            {% if page < total_pages %}
-                <a href="{{ url_for('main.dictionary', page=page+1) }}" class="page-link">Next →</a>
-            {% endif %}
+                
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="btn btn-primary">{{ p }}</span>
+                    {% else %}
+                        <a href="{{ url_for('main.dictionary', page=p) }}" class="btn btn-secondary">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if page < total_pages %}
+                    <a href="{{ url_for('main.dictionary', page=page+1) }}" class="btn btn-secondary">Next →</a>
+                {% endif %}
+            </div>
+        {% endif %}
+        
+        <div style="text-align: center; margin-top: 2rem;">
+            <form method="POST" action="{{ url_for('main.clear_all') }}" onsubmit="return confirm('Are you sure you want to delete ALL words from this deck? This cannot be undone.');">
+                <button type="submit" class="btn btn-danger btn-sm">Clear All Words from Deck</button>
+            </form>
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="empty-state" style="padding: 3rem;">
+                <div class="empty-state-icon" style="font-size: 4rem; margin-bottom: 1rem;">📚</div>
+                <h3 style="margin-bottom: 0.5rem;">No words yet</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Start building your Chinese vocabulary in this deck</p>
+                <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Your First Word</a>
+            </div>
         </div>
     {% endif %}
-    
-    <div style="text-align: center; margin-top: 2rem;">
-        <form method="POST" action="{{ url_for('main.clear_all') }}" onsubmit="return confirm('Are you sure you want to delete ALL words? This cannot be undone.');">
-            <button type="submit" class="btn btn-danger btn-sm">Clear All Words</button>
+</div>
+
+<!-- New Deck Modal -->
+<div id="new-deck-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: var(--bg-secondary); padding: 2rem; border-radius: 8px; max-width: 400px; width: 90%; border: 1px solid var(--border);">
+        <h3>Create New Deck</h3>
+        <form method="POST" action="{{ url_for('main.create_deck') }}">
+            <div style="margin-bottom: 1rem;">
+                <label>Deck Number</label>
+                <input type="number" name="deck_number" min="1" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <label>Label (optional)</label>
+                <input type="text" name="label" placeholder="e.g., HSK 1, Business Chinese" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button type="button" onclick="document.getElementById('new-deck-modal').style.display='none'" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Deck</button>
+            </div>
         </form>
     </div>
-{% else %}
-    <div class="card">
-        <div class="empty-state">
-            <div class="empty-state-icon">📚</div>
-            <h3 style="margin-bottom: 0.5rem;">No words yet</h3>
-            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Start building your Chinese vocabulary</p>
-            <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Your First Word</a>
-        </div>
-    </div>
-{% endif %}
+</div>
+
+<script>
+window.onclick = function(event) {
+    if (event.target.id === 'new-deck-modal') {
+        document.getElementById('new-deck-modal').style.display = 'none';
+    }
+}
+</script>
 {% endblock %}

@@ -141,6 +141,8 @@ def word_detail(character):
 @login_required
 def add_word():
     """Add new word."""
+    deck_id = get_current_deck_id()
+    
     if request.method == 'POST':
         text = request.form.get('text', '').strip()
         
@@ -155,7 +157,6 @@ def add_word():
             flash('No Chinese characters found.', 'error')
             return redirect(url_for('main.add_word'))
         
-        deck_id = get_current_deck_id()
         added = []
         existing = []
         
@@ -185,7 +186,15 @@ def add_word():
         
         return redirect(url_for('main.dictionary'))
     
-    return render_template('add_word.html')
+    # Get deck info for display
+    decks = deck_manager.get_user_decks(current_user.id)
+    current_deck_num = deck_manager.parse_deck_id(deck_id)[1]
+    current_deck_label = next((d.get('label', f'Deck {current_deck_num}') for d in decks if d.get('deck_id') == deck_id), f'Deck {current_deck_num}')
+    
+    return render_template('add_word.html',
+                         deck_id=deck_id,
+                         deck_label=current_deck_label,
+                         deck_number=current_deck_num)
 
 
 @main_bp.route('/delete-word/<int:word_id>', methods=['POST'])

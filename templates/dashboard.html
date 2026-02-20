@@ -4,7 +4,7 @@
 
 {% block content %}
 <!-- Deck Selector Bar -->
-<div style="background: var(--card-bg); padding: 1rem; margin: -2rem -2rem 2rem -2rem; border-bottom: 1px solid var(--border-color);">
+<div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 1rem 0; margin-bottom: 2rem;">
     <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div style="display: flex; align-items: center; gap: 1rem;">
             <h2 style="margin: 0; font-size: 1.25rem;">📚 {{ deck_label or 'Main Deck' }}</h2>
@@ -13,17 +13,11 @@
         
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <span style="color: var(--text-secondary); font-size: 0.875rem;">Switch Deck:</span>
-            <form method="POST" action="{{ url_for('main.switch_deck', deck_number=1) }}" style="display: inline;">
-                <input type="hidden" name="deck_number" value="1">
-                <button type="submit" class="btn btn-sm {% if deck_number == 1 %}btn-primary{% else %}btn-secondary{% endif %}">1</button>
-            </form>
             {% for d in decks %}
                 {% set d_num = d.deck_number %}
-                {% if d_num != 1 %}
                 <form method="POST" action="{{ url_for('main.switch_deck', deck_number=d_num) }}" style="display: inline;">
                     <button type="submit" class="btn btn-sm {% if deck_number == d_num %}btn-primary{% else %}btn-secondary{% endif %}">{{ d_num }}</button>
                 </form>
-                {% endif %}
             {% endfor %}
             
             <!-- Create New Deck Button -->
@@ -32,95 +26,127 @@
     </div>
 </div>
 
-<h1 style="margin-bottom: 0.5rem;">Dashboard</h1>
-<p style="color: var(--text-secondary); margin-bottom: 2rem;">Welcome back, {{ current_user.display_name }}!</p>
+<div class="container">
+    <h1 style="margin-bottom: 0.5rem;">Dashboard</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 2rem;">Welcome back, {{ current_user.display_name }}!</p>
 
-<!-- Stats -->
-<div class="grid grid-4">
-    <div class="card stat-card">
-        <div class="stat-value">{{ total_count }}</div>
-        <div class="stat-label">Words in Deck</div>
+    <!-- Stats -->
+    <div class="grid grid-4">
+        <div class="card stat-card">
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Words in Deck</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ "%.0f"|format(coverage) }}%</div>
+            <div class="stat-label">Text Coverage</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">HSK{{ hsk_progress.current_level or '?' }}</div>
+            <div class="stat-label">Current Level</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ "%.0f"|format(hsk_progress.progress_hsk6) }}%</div>
+            <div class="stat-label">To HSK6</div>
+        </div>
     </div>
-    <div class="card stat-card">
-        <div class="stat-value">{{ "%.0f"|format(coverage) }}%</div>
-        <div class="stat-label">Text Coverage</div>
-    </div>
-    <div class="card stat-card">
-        <div class="stat-value">HSK{{ hsk_progress.current_level or '?' }}</div>
-        <div class="stat-label">Current Level</div>
-    </div>
-    <div class="card stat-card">
-        <div class="stat-value">{{ "%.0f"|format(hsk_progress.progress_hsk6) }}%</div>
-        <div class="stat-label">To HSK6</div>
-    </div>
-</div>
 
-<!-- Quick Actions -->
-<div class="grid grid-3" style="margin-bottom: 2rem;">
-    <a href="{{ url_for('main.add_word') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
-        <div style="font-size: 3rem; margin-bottom: 1rem;">➕</div>
-        <h4>Add Words</h4>
-        <p style="color: var(--text-secondary); font-size: 0.875rem;">Add new Chinese vocabulary</p>
-    </a>
-    
-    <a href="{{ url_for('main.dictionary') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
-        <div style="font-size: 3rem; margin-bottom: 1rem;">📖</div>
-        <h4>View Dictionary</h4>
-        <p style="color: var(--text-secondary); font-size: 0.875rem;">Browse all {{ total_count }} words</p>
-    </a>
-    
-    <a href="{{ url_for('main.export_csv') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
-        <div style="font-size: 3rem; margin-bottom: 1rem;">📥</div>
-        <h4>Export Deck</h4>
-        <p style="color: var(--text-secondary); font-size: 0.875rem;">Download for Anki</p>
-    </a>
-</div>
-
-<!-- Recent Words with Preview -->
-<div class="card">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 class="card-title">Recent Words</h3>
-        <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary btn-sm">View All</a>
+    <!-- Quick Actions -->
+    <div class="grid grid-3" style="margin-bottom: 2rem;">
+        <a href="{{ url_for('main.add_word') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">➕</div>
+            <h4>Add Words</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Add new Chinese vocabulary</p>
+        </a>
+        
+        <a href="{{ url_for('main.dictionary') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📖</div>
+            <h4>View Dictionary</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Browse all {{ total_count }} words</p>
+        </a>
+        
+        <a href="{{ url_for('main.export_csv') }}" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📥</div>
+            <h4>Export Deck</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Download for Anki</p>
+        </a>
     </div>
-    
-    {% if words %}
-        <div style="display: grid; gap: 1rem;">
-            {% for word in words %}
-            <div class="word-item" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="font-size: 2rem; min-width: 60px; text-align: center;">{{ word.character }}</div>
-                    <div>
-                        <div style="font-size: 1.1rem; color: var(--primary);">{{ word.pinyin|safe }}</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary);">{{ word.translation[:50] }}{% if word.translation|length > 50 %}...{% endif %}</div>
+
+    <!-- Recent Words with Preview -->
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="card-title">Recent Words</h3>
+            <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary btn-sm">View All</a>
+        </div>
+        
+        {% if words %}
+            <div style="display: grid; gap: 1rem;">
+                {% for word in words %}
+                <div class="word-item" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border);">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="font-size: 2rem; min-width: 60px; text-align: center;">{{ word.character }}</div>
+                        <div>
+                            <div style="font-size: 1.1rem; color: var(--primary);">{{ word.pinyin|safe }}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">{{ word.translation[:50] }}{% if word.translation|length > 50 %}...{% endif %}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="previewCard('{{ word.character }}')" class="btn btn-sm btn-secondary">👁️ Preview</button>
+                        <a href="{{ url_for('main.word_detail', character=word.character) }}" class="btn btn-sm btn-primary">View</a>
                     </div>
                 </div>
-                <div style="display: flex; gap: 0.5rem;">
-                    <button onclick="previewCard('{{ word.character }}')" class="btn btn-sm btn-secondary">👁️ Preview</button>
-                    <a href="{{ url_for('main.word_detail', character=word.character) }}" class="btn btn-sm btn-primary">View</a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No words in this deck yet.</p>
+                <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Your First Word</a>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- First Time User Help -->
+    {% if total_count == 0 %}
+    <div class="card" style="margin-top: 2rem; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white;">
+        <div style="padding: 2rem; text-align: center;">
+            <h3 style="margin-bottom: 1rem;">🎯 Getting Started</h3>
+            <p style="margin-bottom: 1.5rem; opacity: 0.9;">New to Anki Card Creator? Here's how to get started:</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; text-align: left;">
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">1️⃣</div>
+                    <strong>Add Words</strong>
+                    <p style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.5rem;">Click "Add Words" and paste Chinese text</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">2️⃣</div>
+                    <strong>Auto-Generate</strong>
+                    <p style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.5rem;">We'll create cards with pinyin, examples & images</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">3️⃣</div>
+                    <strong>Export to Anki</strong>
+                    <p style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.5rem;">Download CSV and import into Anki</p>
                 </div>
             </div>
-            {% endfor %}
+            <div style="margin-top: 1.5rem;">
+                <a href="{{ url_for('main.help_page') }}" class="btn" style="background: white; color: var(--primary);">View Full Guide</a>
+            </div>
         </div>
-    {% else %}
-        <div class="empty-state">
-            <p>No words in this deck yet.</p>
-            <a href="{{ url_for('main.add_word') }}" class="btn btn-primary">Add Your First Word</a>
-        </div>
+    </div>
     {% endif %}
 </div>
 
 <!-- New Deck Modal -->
 <div id="new-deck-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background: var(--card-bg); padding: 2rem; border-radius: 8px; max-width: 400px; width: 90%;">
+    <div style="background: var(--bg-secondary); padding: 2rem; border-radius: 8px; max-width: 400px; width: 90%; border: 1px solid var(--border);">
         <h3>Create New Deck</h3>
         <form method="POST" action="{{ url_for('main.create_deck') }}">
             <div style="margin-bottom: 1rem;">
                 <label>Deck Number</label>
-                <input type="number" name="deck_number" min="1" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;">
+                <input type="number" name="deck_number" min="1" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
             </div>
             <div style="margin-bottom: 1rem;">
                 <label>Label (optional)</label>
-                <input type="text" name="label" placeholder="e.g., HSK 1, Business Chinese" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;">
+                <input type="text" name="label" placeholder="e.g., HSK 1, Business Chinese" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
             </div>
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                 <button type="button" onclick="document.getElementById('new-deck-modal').style.display='none'" class="btn btn-secondary">Cancel</button>
@@ -132,10 +158,10 @@
 
 <!-- Anki Preview Modal -->
 <div id="preview-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background: var(--card-bg); border-radius: 8px; max-width: 700px; width: 95%; max-height: 90vh; overflow: auto;">
-        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+    <div style="background: var(--bg-secondary); border-radius: 8px; max-width: 700px; width: 95%; max-height: 90vh; overflow: auto; border: 1px solid var(--border);">
+        <div style="padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
             <h3 style="margin: 0;">Anki Card Preview</h3>
-            <button onclick="document.getElementById('preview-modal').style.display='none'" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>
+            <button onclick="document.getElementById('preview-modal').style.display='none'" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-primary);">×</button>
         </div>
         <div id="preview-content" style="padding: 1rem;">
             Loading...

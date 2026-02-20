@@ -1,67 +1,204 @@
-# Telegram Login Widget Setup
+# Telegram Bot Setup - Step by Step
 
-This guide explains how to set up Telegram login for your Anki Card Creator app.
+This guide will walk you through setting up the Telegram bot for Anki Card Creator.
 
-## Step 1: Create a Telegram Bot
+## Overview
 
-1. Open Telegram and search for [@BotFather](https://t.me/botfather)
-2. Start a chat and send `/newbot`
-3. Follow the prompts:
-   - Enter a **name** for your bot (display name, e.g., "Anki Card Creator")
-   - Enter a **username** for your bot (must end in `bot`, e.g., `ankicards_bot`)
-4. Copy the **bot token** provided (looks like `123456789:ABCdefGHIjklMNOpqrSTUvwxyz`)
+The Telegram bot allows users to:
+- Add Chinese words by sending text or images
+- View their dictionary
+- Export to Anki CSV
+- Manage multiple decks
+- Get statistics
+
+## Step 1: Create Your Bot
+
+### 1.1 Message @BotFather
+
+1. Open Telegram
+2. Search for `@BotFather` (official Telegram bot creator)
+3. Click **START** or send `/start`
+
+### 1.2 Create a New Bot
+
+1. Send `/newbot` to BotFather
+2. When asked for a name, enter: `Anki Card Creator` (or your preferred name)
+3. When asked for a username, enter a unique name ending in `bot`:
+   - Example: `ankicards_bot`
+   - Example: `yourname_anki_bot`
+   - Must be globally unique
+
+### 1.3 Save Your Token
+
+BotFather will give you a token that looks like:
+```
+123456789:ABCdefGHIjklMNOpqrSTUvwxyz123456789
+```
+
+**⚠️ IMPORTANT:** Save this token somewhere safe! You'll need it in Step 3.
 
 ## Step 2: Configure Domain
 
-To use the Telegram Login Widget, you must set your domain:
+This step is REQUIRED for the Telegram Login Widget to work on your website.
 
-1. Message [@BotFather](https://t.me/botfather)
+### 2.1 Set the Domain
+
+1. Message `@BotFather` again
 2. Send `/setdomain`
 3. Select your bot from the list
-4. Enter your Koyeb domain: `https://your-app-name.koyeb.app`
-   - Replace `your-app-name` with your actual Koyeb app name
+4. Enter your website URL:
+   ```
+   https://your-app-name.koyeb.app
+   ```
+   (Replace `your-app-name` with your actual Koyeb app name)
 
-## Step 3: Set Environment Variables
+### 2.2 Verify
 
-In your Koyeb dashboard:
+You should see: `Success! Domain updated.`
 
-1. Go to your app → **Settings** → **Environment Variables**
-2. Add these variables:
+## Step 3: Configure Environment Variables
+
+### 3.1 For Koyeb Deployment (Web App)
+
+1. Go to [Koyeb Dashboard](https://app.koyeb.com)
+2. Select your app
+3. Go to **Settings** → **Environment Variables**
+4. Add these variables:
 
 | Variable | Value | Secret? |
 |----------|-------|---------|
-| `TELEGRAM_BOT_TOKEN` | Your bot token from Step 1 | **Yes** |
-| `TELEGRAM_BOT_USERNAME` | Your bot username (without @, e.g., `ankicards_bot`) | No |
+| `TELEGRAM_BOT_TOKEN` | Your token from Step 1.3 | **YES** |
+| `TELEGRAM_BOT_USERNAME` | Your bot username (without @) | No |
 
-## Step 4: Deploy
+Example:
+```
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz123456789
+TELEGRAM_BOT_USERNAME=ankicards_bot
+```
 
-Koyeb will automatically redeploy when you update environment variables.
+### 3.2 For Telegram Bot (Optional - if running separately)
 
-## Testing
+If you want to run the Telegram bot separately, also set:
 
-1. Visit your app login page
-2. You should see "Login with Telegram" button
-3. Click it - Telegram will ask you to confirm
-4. After confirming, you'll be redirected back to your app
+```bash
+export TELEGRAM_BOT_TOKEN="your-token-here"
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_SERVICE_KEY="your-service-key"
+export TELEGRAM_ADMIN_ID="your-telegram-id"  # Optional
+```
+
+Then run:
+```bash
+python run_telegram_bot.py
+```
+
+## Step 4: Set Up Bot Commands (Recommended)
+
+This adds a command menu in Telegram:
+
+1. Message `@BotFather`
+2. Send `/setcommands`
+3. Select your bot
+4. Send this command list:
+
+```
+start - Start the bot and get welcome message
+help - Show all available commands
+dictionary - View your saved words
+dictinfo - Show dictionary statistics
+export - Export to Anki CSV
+csv - Alias for /export
+e - Quick export
+list - List your decks
+l - Quick list
+chosedict - Switch to a different deck
+rmdict - Remove a word by index or character
+rm - Alias for /rmdict
+search - Search for a word
+clearmydata - Clear all your data
+changelog - See latest updates
+admin - Admin menu (admin only)
+stats - System statistics (admin only)
+```
+
+## Step 5: Test Your Bot
+
+### 5.1 Find Your Bot
+
+1. In Telegram, search for your bot's username (e.g., `@ankicards_bot`)
+2. Click **START**
+
+### 5.2 Test Commands
+
+Try these commands:
+- `/start` - Should welcome you
+- `/help` - Should show commands
+- Send Chinese text like `你好世界` - Should extract words
+
+### 5.3 Test Web Login
+
+1. Go to your website login page
+2. Click "Login with Telegram"
+3. Should redirect to Telegram and back
 
 ## Troubleshooting
 
-**"Bot domain invalid" error:**
-- Make sure you set the domain with BotFather using `/setdomain`
-- Ensure the domain matches exactly (including https://)
+### "Bot domain invalid" Error
+- Make sure you ran `/setdomain` with BotFather
+- Ensure the URL includes `https://`
+- The URL must match exactly
 
-**Login button not appearing:**
-- Check that `TELEGRAM_BOT_USERNAME` is set correctly (without @)
-- Verify `TELEGRAM_BOT_TOKEN` is correct
+### Bot Not Responding
+- Check that `TELEGRAM_BOT_TOKEN` is set correctly
+- Check Koyeb logs for errors
+- Try restarting the app
 
-**"Authentication failed" error:**
-- Check Koyeb logs for detailed error messages
-- Ensure your domain is properly configured
+### Login Button Not Working
+- Verify `TELEGRAM_BOT_USERNAME` is set (without @)
+- Check browser console for JavaScript errors
+- Ensure domain is configured correctly
 
-## Admin Setup (Optional)
+### "Account pending approval"
+- New users need admin approval
+- Go to Admin Dashboard → Pending Approvals
+- Approve the user
 
-To make yourself an admin via Telegram:
+## Bot Commands Reference
 
-1. Set `TELEGRAM_ADMIN_ID` in environment variables with your Telegram numeric ID
-2. You can get your ID by messaging [@userinfobot](https://t.me/userinfobot) on Telegram
-3. The admin will be auto-created on first app startup
+### User Commands
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and setup |
+| `/help` | Show all commands |
+| `/dictionary` | View saved words |
+| `/export` | Export to CSV |
+| `/list` | List decks |
+| `/chosedict [num]` | Switch deck |
+| `/rmdict [index/char]` | Remove word |
+| `/search [word]` | Search dictionary |
+| `/clearmydata` | Clear all data |
+
+### Admin Commands
+| Command | Description |
+|---------|-------------|
+| `/admin` | Admin menu |
+| `/stats` | System statistics |
+| `/wipedict [user_id]` | Wipe user data |
+
+## Next Steps
+
+1. **Get Your Admin ID** (optional)
+   - Message `@userinfobot` on Telegram
+   - It will reply with your ID
+   - Set `TELEGRAM_ADMIN_ID` in environment variables
+
+2. **Test End-to-End**
+   - Register as a new user via web
+   - Approve yourself via admin
+   - Add words via Telegram
+   - Export and import to Anki
+
+3. **Share With Users**
+   - Share your bot username
+   - Users can start using immediately
+   - They'll be pending until you approve them

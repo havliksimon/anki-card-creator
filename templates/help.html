@@ -1,72 +1,204 @@
 {% extends 'base.html' %}
 
-{% block title %}Help - {{ app_name }}{% endblock %}
+{% block title %}Help & Guide - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div style="max-width: 800px; margin: 0 auto;">
-    <h1 style="margin-bottom: 2rem;">Help & Documentation</h1>
-    
-    <div class="card">
-        <h2 style="margin-bottom: 1rem;">How to Use</h2>
+<div class="container" style="max-width: 900px;">
+    <h1 style="margin-bottom: 0.5rem;">Help & Getting Started</h1>
+    <p style="color: var(--text-secondary); margin-bottom: 2rem;">Everything you need to know about using Anki Card Creator</p>
+
+    <!-- Quick Start Cards -->
+    <div class="grid grid-3" style="margin-bottom: 3rem;">
+        <a href="#anki-setup" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 1.5rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📱</div>
+            <h4>Anki Setup</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Install and configure Anki</p>
+        </a>
         
-        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">1. Adding Words</h3>
-        <p style="color: var(--text-secondary); line-height: 1.8;">
-            Go to the "Add Words" page and paste Chinese text. Our system will automatically extract all 
-            unique Chinese characters and generate flashcard data including pinyin, translations, and example sentences.
-        </p>
+        <a href="#adding-words" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 1.5rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">➕</div>
+            <h4>Adding Words</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">How to add vocabulary</p>
+        </a>
         
-        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">2. Exporting to Anki</h3>
-        <p style="color: var(--text-secondary); line-height: 1.8;">
-            Once you have words in your dictionary, click "Export CSV" to download a file formatted for Anki import.
-            In Anki: File → Import → Select the CSV → Set field separator to Comma → Enable "Allow HTML in fields"
-        </p>
-        
-        <h3 style="color: var(--primary-light); margin: 1.5rem 0 0.75rem;">3. Card Types</h3>
-        <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
-            <li><strong>Writing:</strong> See the character, write it down</li>
-            <li><strong>Reading:</strong> See pinyin, recall character and meaning</li>
-            <li><strong>Definition:</strong> See English, recall Chinese</li>
-        </ul>
+        <a href="#exporting" class="card" style="text-decoration: none; color: inherit; text-align: center; padding: 1.5rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📥</div>
+            <h4>Exporting</h4>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Import into Anki</p>
+        </a>
     </div>
-    
-    <div class="card">
-        <h2 style="margin-bottom: 1rem;">Features</h2>
+
+    <!-- Anki Setup Section -->
+    <div id="anki-setup" class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h2 class="card-title">📱 Step 1: Install Anki</h2>
+        </div>
         
-        <div class="grid grid-2">
-            <div>
-                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">📊 Progress Tracking</h4>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                    Track your HSK level progress and estimated text coverage.
-                </p>
+        <div style="padding: 1.5rem;">
+            <p style="margin-bottom: 1.5rem;">Anki is a free flashcard app that uses spaced repetition to help you memorize Chinese characters efficiently.</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px;">
+                    <h4 style="margin-bottom: 1rem;">📱 Android</h4>
+                    <ol style="padding-left: 1.2rem; line-height: 1.8; color: var(--text-secondary);">
+                        <li>Download <a href="https://play.google.com/store/apps/details?id=com.ichi2.anki" target="_blank" style="color: var(--primary);">AnkiDroid</a> from Google Play</li>
+                        <li>Install and open the app</li>
+                        <li>Create an account to sync across devices</li>
+                    </ol>
+                </div>
+                
+                <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px;">
+                    <h4 style="margin-bottom: 1rem;">🍎 iPhone/iPad</h4>
+                    <ol style="padding-left: 1.2rem; line-height: 1.8; color: var(--text-secondary);">
+                        <li>Download <a href="https://apps.apple.com/us/app/ankimobile-flashcards/id373493387" target="_blank" style="color: var(--primary);">AnkiMobile</a> from App Store ($25)</li>
+                        <li>Or use <a href="https://apps.apple.com/us/app/ankidroid-flashcards/id1553424668" target="_blank" style="color: var(--primary);">AnkiDroid</a> (free alternative)</li>
+                        <li>Create an account to sync</li>
+                    </ol>
+                </div>
+                
+                <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px;">
+                    <h4 style="margin-bottom: 1rem;">💻 Computer</h4>
+                    <ol style="padding-left: 1.2rem; line-height: 1.8; color: var(--text-secondary);">
+                        <li>Download from <a href="https://apps.ankiweb.net/" target="_blank" style="color: var(--primary);">ankiweb.net</a></li>
+                        <li>Install the application</li>
+                        <li>Create an account to sync</li>
+                    </ol>
+                </div>
             </div>
-            <div>
-                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🔊 Audio</h4>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                    Built-in text-to-speech for pronunciation practice.
-                </p>
-            </div>
-            <div>
-                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🖌 Stroke Order</h4>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                    Visual stroke order GIFs for character writing practice.
-                </p>
-            </div>
-            <div>
-                <h4 style="color: var(--primary-light); margin-bottom: 0.5rem;">🤖 AI Examples</h4>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                    AI-generated example sentences at appropriate HSK levels.
-                </p>
+
+            <div style="background: var(--primary); color: white; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                <strong>💡 Pro Tip:</strong> Creating an AnkiWeb account allows you to sync your cards across all devices automatically!
             </div>
         </div>
     </div>
-    
+
+    <!-- Adding Words Section -->
+    <div id="adding-words" class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h2 class="card-title">➕ Step 2: Add Chinese Words</h2>
+        </div>
+        
+        <div style="padding: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">1</div>
+                    <strong>Click "Add Words"</strong>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">Go to the Add Words page from your dashboard</p>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">2</div>
+                    <strong>Paste Chinese Text</strong>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">Paste any Chinese text - paragraphs, sentences, or characters</p>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">3</div>
+                    <strong>Auto-Extract</strong>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">We extract all unique Chinese words automatically</p>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">4</div>
+                    <strong>Enrich Data</strong>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">Each word gets pinyin, examples, images & audio</p>
+                </div>
+            </div>
+
+            <h4 style="margin-bottom: 1rem;">Multi-Deck System</h4>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">You can create multiple vocabulary decks to organize your learning:</p>
+            <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8; margin-bottom: 1.5rem;">
+                <li><strong>Deck 1:</strong> Main vocabulary</li>
+                <li><strong>Deck 2:</strong> HSK 1 words</li>
+                <li><strong>Deck 3:</strong> Business Chinese</li>
+                <li>And so on...</li>
+            </ul>
+            <p style="color: var(--text-secondary);">Use the deck switcher bar at the top of the page to switch between decks.</p>
+        </div>
+    </div>
+
+    <!-- Exporting Section -->
+    <div id="exporting" class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h2 class="card-title">📥 Step 3: Export to Anki</h2>
+        </div>
+        
+        <div style="padding: 1.5rem;">
+            <p style="margin-bottom: 1.5rem;">Once you've added words, export them to Anki to start studying:</p>
+            
+            <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 1rem;">Export Steps:</h4>
+                <ol style="padding-left: 1.2rem; line-height: 1.8; color: var(--text-secondary);">
+                    <li>Go to your <strong>Dictionary</strong> page</li>
+                    <li>Click the <strong>"Export CSV"</strong> button</li>
+                    <li>Save the .csv file to your device</li>
+                </ol>
+            </div>
+
+            <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 1rem;">Import to Anki:</h4>
+                <ol style="padding-left: 1.2rem; line-height: 1.8; color: var(--text-secondary);">
+                    <li>Open Anki on your device</li>
+                    <li>Tap/Click <strong>"Import"</strong> or open the CSV file</li>
+                    <li>Set <strong>Field separator</strong> to <strong>"Comma"</strong></li>
+                    <li>Enable <strong>"Allow HTML in fields"</strong></li>
+                    <li>Choose a <strong>Note Type</strong> (e.g., "Basic")</li>
+                    <li>Choose or create a <strong>Deck</strong> (e.g., "Personal Vocabulary")</li>
+                    <li>Click <strong>"Import"</strong> 🎉</li>
+                </ol>
+            </div>
+
+            <div style="background: var(--primary); color: white; padding: 1rem 1.5rem; border-radius: 8px;">
+                <strong>💡 Important:</strong> Make sure to enable "Allow HTML in fields" to see colored pinyin and formatted examples!
+            </div>
+        </div>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h2 class="card-title">❓ Frequently Asked Questions</h2>
+        </div>
+        
+        <div style="padding: 1.5rem;">
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 0.5rem;">Q: Can I use this on multiple devices?</h4>
+                <p style="color: var(--text-secondary);">Yes! Your vocabulary is stored in the cloud. Just log in from any device to access your decks.</p>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 0.5rem;">Q: How many words can I add?</h4>
+                <p style="color: var(--text-secondary);">Unlimited! Add as many words as you need across multiple decks.</p>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 0.5rem;">Q: What data is included for each word?</h4>
+                <p style="color: var(--text-secondary);">Each word includes: Chinese character, colored pinyin, translation, example sentences, stroke order GIFs, pronunciation audio, and an exemplary image.</p>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 0.5rem;">Q: Can I delete words?</h4>
+                <p style="color: var(--text-secondary);">Yes, go to your Dictionary page and click the Delete button next to any word.</p>
+            </div>
+            
+            <div>
+                <h4 style="margin-bottom: 0.5rem;">Q: Is my data safe?</h4>
+                <p style="color: var(--text-secondary);">Yes, your data is stored securely in Supabase with encrypted connections.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact/Support -->
     <div class="card">
-        <h2 style="margin-bottom: 1rem;">Account</h2>
-        <p style="color: var(--text-secondary); line-height: 1.8;">
-            New accounts require admin approval before you can start using the app. 
-            You'll be notified via email once your account is approved. 
-            You can sign in using either email/password or Telegram.
-        </p>
+        <div class="card-header">
+            <h2 class="card-title">📧 Need More Help?</h2>
+        </div>
+        
+        <div style="padding: 1.5rem;">
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">If you have questions or need assistance:</p>
+            <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
+                <li>Contact the administrator via Telegram</li>
+                <li>Check the Telegram bot for additional commands</li>
+                <li>Review this help page again</li>
+            </ul>
+        </div>
     </div>
 </div>
 {% endblock %}

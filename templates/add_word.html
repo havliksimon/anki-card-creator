@@ -3,37 +3,56 @@
 {% block title %}Add Words - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div style="max-width: 600px; margin: 0 auto;">
-    <div class="card">
-        <div class="card-header">
-            <h1 class="card-title">Add Chinese Words</h1>
+<!-- Deck Selector Bar -->
+<div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 1rem 0; margin-bottom: 2rem;">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <h2 style="margin: 0; font-size: 1.25rem;">📚 {{ deck_label or 'Main Deck' }}</h2>
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">(Deck {{ deck_number }})</span>
         </div>
         
-        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-            Enter Chinese text below. We'll extract all Chinese characters and generate flashcard data for each unique word.
-        </p>
-        
-        <form method="POST" action="{{ url_for('main.add_word') }}">
-            <div class="form-group">
-                <label class="form-label">Chinese Text</label>
-                <textarea name="text" class="form-input" rows="5" required 
-                    placeholder="Enter Chinese text here... 你好世界"></textarea>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">Adding to:</span>
+            <span class="btn btn-sm btn-primary">Deck {{ deck_number }}</span>
+            <a href="{{ url_for('main.switch_deck', deck_number=1) }}" class="btn btn-sm btn-secondary">Switch Deck</a>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div style="max-width: 600px; margin: 0 auto;">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="card-title">Add Chinese Words</h1>
             </div>
             
-            <button type="submit" class="btn btn-primary" style="width: 100%;">
-                Extract & Add Words
-            </button>
-        </form>
-    </div>
-    
-    <div class="card">
-        <h3 style="margin-bottom: 1rem;">Tips</h3>
-        <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
-            <li>You can paste entire paragraphs - we'll extract all unique Chinese words</li>
-            <li>Each unique character combination will only be added once</li>
-            <li>Existing words in your dictionary will be skipped</li>
-            <li>Data generation may take a few moments for new words</li>
-        </ul>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Enter Chinese text below. We'll extract all Chinese characters and generate flashcard data for each unique word.
+            </p>
+            
+            <form method="POST" action="{{ url_for('main.add_word') }}">
+                <div class="form-group">
+                    <label class="form-label">Chinese Text</label>
+                    <textarea name="text" class="form-input" rows="5" required 
+                        placeholder="Enter Chinese text here... 你好世界" style="background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; padding: 0.75rem; width: 100%;"></textarea>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    Extract & Add Words
+                </button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">💡 Tips</h3>
+            <ul style="color: var(--text-secondary); padding-left: 1.5rem; line-height: 1.8;">
+                <li>You can paste entire paragraphs - we'll extract all unique Chinese words</li>
+                <li>Each unique character combination will only be added once</li>
+                <li>Existing words in your dictionary will be skipped</li>
+                <li>Data generation may take a few moments for new words</li>
+                <li>Words are automatically enriched with pinyin, examples, and images</li>
+            </ul>
+        </div>
     </div>
 </div>
 {% endblock %}
