@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Deck Switcher - Admin{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">🎴 Deck Switcher</h1>
+    
+    {% if viewed_user.id != current_user.id %}
+    <div class="alert alert-info">
+        <strong>Viewing deck for:</strong> 
+        {{ viewed_user.display_name }} (ID: {{ viewed_user.id }})
+        <a href="{{ url_for('admin.reset_to_my_deck') }}" class="btn btn-sm btn-outline-primary ms-3">
+            ↩ Back to My Deck
+        </a>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Select User Deck</h5>
+                </div>
+                <div class="list-group list-group-flush" style="max-height: 600px; overflow-y: auto;">
+                    <a href="{{ url_for('admin.reset_to_my_deck') }}" 
+                       class="list-group-item list-group-item-action {% if viewed_user.id == current_user.id %}active{% endif %}">
+                        <strong>👤 My Deck</strong>
+                        <small class="d-block text-muted">{{ current_user.email or current_user.telegram_id }}</small>
+                    </a>
+                    {% for user in users %}
+                        {% if user.id != current_user.id %}
+                        <a href="{{ url_for('admin.switch_to_user', user_id=user.id) }}" 
+                           class="list-group-item list-group-item-action {% if viewed_user.id == user.id %}active{% endif %}">
+                            <strong>ID: {{ user.id }}</strong>
+                            <small class="d-block text-muted">
+                                {{ user.email or user.telegram_id or 'No identifier' }}
+                                {% if user.is_admin %}
+                                    <span class="badge bg-danger">Admin</span>
+                                {% endif %}
+                            </small>
+                        </a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        Vocabulary Deck
+                        {% if viewed_user.id != current_user.id %}
+                            <span class="text-muted">(Viewing: {{ viewed_user.id }})</span>
+                        {% endif %}
+                    </h5>
+                    <span class="badge bg-primary">{{ words|length }} words</span>
+                </div>
+                <div class="card-body">
+                    {% if words %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Character</th>
+                                        <th>Pinyin</th>
+                                        <th>Translation</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for word in words %}
+                                    <tr>
+                                        <td class="fs-4">{{ word.character }}</td>
+                                        <td>{{ word.pinyin|safe }}</td>
+                                        <td>{{ word.translation[:50] }}{% if word.translation|length > 50 %}...{% endif %}</td>
+                                        <td>
+                                            <a href="{{ url_for('main.word_detail', character=word.character) }}" 
+                                               class="btn btn-sm btn-outline-primary">View</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center">No words in this deck.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

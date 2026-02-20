@@ -1,5 +1,5 @@
 """Admin routes."""
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session
 from flask_login import login_required, current_user
 
 from src.models.database import db
@@ -33,6 +33,70 @@ def index():
                          stats=stats,
                          pending=pending,
                          users=users)
+
+
+@admin_bp.route('/deck-switcher')
+@login_required
+@admin_required
+def deck_switcher():
+    """Deck switcher for admin - view any user's deck."""
+    # Get all users sorted by ID (low numbers first, then UUIDs)
+    all_users = db.get_users()
+    
+    # Sort: numeric IDs first (as integers), then others
+    def sort_key(user):
+        uid = user.get('id', '')
+        try:
+            # Try to parse as integer for numeric IDs
+            return (0, int(uid))
+        except (ValueError, TypeError):
+            # UUIDs or other formats come after
+            return (1, uid)
+    
+    all_users.sort(key=sort_key)
+    
+    # Get current viewed user from session or default to self
+    viewed_user_id = session.get('viewed_user_id', current_user.id)
+    viewed_user = None
+    
+    if viewed_user_id != current_user.id:
+        user_data = db.get_user_by_id(viewed_user_id)
+        if user_data:
+            viewed_user = User(user_data)
+    
+    if not viewed_user:
+        viewed_user = current_user
+        viewed_user_id = current_user.id
+    
+    # Get words for viewed user
+    words = db.get_words_by_user(viewed_user_id)
+    
+    return render_template('admin/deck_switcher.html',
+                         users=all_users,
+                         viewed_user=viewed_user,
+                         words=words)
+
+
+@admin_bp.route('/switch-to-user/<user_id>')
+@login_required
+@admin_required
+def switch_to_user(user_id):
+    """Switch to viewing a specific user's deck."""
+    session['viewed_user_id'] = user_id
+    user_data = db.get_user_by_id(user_id)
+    if user_data:
+        flash(f"Now viewing deck for: {user_data.get('email') or user_data.get('telegram_id') or user_id}", 'info')
+    return redirect(url_for('admin.deck_switcher'))
+
+
+@admin_bp.route('/reset-to-my-deck')
+@login_required
+@admin_required
+def reset_to_my_deck():
+    """Reset to viewing admin's own deck."""
+    session.pop('viewed_user_id', None)
+    flash("Back to your own deck", 'info')
+    return redirect(url_for('admin.deck_switcher'))
 
 
 @admin_bp.route('/pending')
@@ -100,6 +164,17 @@ def reject(user_id):
 def users():
     """View all users."""
     users_list = db.get_users()
+    
+    # Sort: numeric IDs first, then others
+    def sort_key(user):
+        uid = user.get('id', '')
+        try:
+            return (0, int(uid))
+        except (ValueError, TypeError):
+            return (1, uid)
+    
+    users_list.sort(key=sort_key)
+    
     return render_template('admin/users.html', users=users_list)
 
 

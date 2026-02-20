@@ -26,8 +26,25 @@ def index():
 @login_required
 def dashboard():
     """User dashboard."""
-    words = current_user.get_words()
-    stats = current_user.get_stats()
+    # Check if admin has switched to another user's deck
+    from flask import session
+    from src.models.user import User
+    
+    viewed_user_id = session.get('viewed_user_id')
+    if viewed_user_id and current_user.is_admin_user and viewed_user_id != current_user.id:
+        viewed_user = User.get_by_id(viewed_user_id)
+        if viewed_user:
+            words = viewed_user.get_words()
+            stats = viewed_user.get_stats()
+            is_viewing_other = True
+        else:
+            words = current_user.get_words()
+            stats = current_user.get_stats()
+            is_viewing_other = False
+    else:
+        words = current_user.get_words()
+        stats = current_user.get_stats()
+        is_viewing_other = False
     
     # Calculate progress
     char_count = stats.get('total_words', 0)
@@ -39,7 +56,8 @@ def dashboard():
                          stats=stats,
                          coverage=coverage,
                          hsk_progress=hsk_progress,
-                         total_count=len(words))
+                         total_count=len(words),
+                         is_viewing_other=is_viewing_other)
 
 
 @main_bp.route('/dictionary')
