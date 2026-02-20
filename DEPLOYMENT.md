@@ -281,6 +281,59 @@ Configuration:
 | `DEEPSEEK_API_KEY` | DeepSeek API for AI sentences | (none) |
 | `UNSPLASH_API_KEY` | Unsplash API for images | (none) |
 | `GOOGLE_VISION_API_KEY` | Google Vision for OCR | (none) |
+| `R2_ACCOUNT_ID` | Cloudflare R2 Account ID | (none) |
+| `R2_ACCESS_KEY_ID` | Cloudflare R2 API Token | (none) |
+| `R2_BUCKET_NAME` | R2 bucket name | `anki-card-creator` |
+| `R2_PUBLIC_URL` | Public URL for R2 files | (auto-generated) |
+
+---
+
+## Cloudflare R2 Storage Setup (Optional)
+
+R2 provides S3-compatible object storage for storing TTS audio and stroke GIFs with better performance than Supabase storage.
+
+### 1. Create R2 Bucket
+
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) and sign in
+2. Navigate to **R2 Object Storage**
+3. Click **Create bucket**
+4. Name: `anki-card-creator`
+5. Region: Choose closest to your users
+6. Click **Create bucket**
+
+### 2. Create API Token
+
+1. In R2 dashboard, go to **Manage R2 API Tokens**
+2. Click **Create API Token**
+3. Configure:
+   - **Token name**: `anki-card-creator-app`
+   - **Permissions**: **Object Read & Write**
+   - **Bucket**: Select `anki-card-creator` bucket only
+4. Click **Create API Token**
+5. Copy the **Token** value (40-character string)
+
+### 3. Get Account ID
+
+Your Account ID is visible in the R2 dashboard sidebar (32-character hex string).
+
+### 4. Configure Environment Variables
+
+| Variable | Value | Secret? |
+|----------|-------|---------|
+| `R2_ACCOUNT_ID` | Your Cloudflare Account ID | No |
+| `R2_ACCESS_KEY_ID` | Your R2 API Token (40 chars) | **Yes** |
+| `R2_BUCKET_NAME` | `anki-card-creator` | No |
+| `R2_PUBLIC_URL` | `https://{account_id}.r2.cloudflarestorage.com/{bucket}` | No |
+
+**Important**: R2 API Tokens are 40 characters and work with the native HTTP API. They are NOT compatible with AWS S3 SDK format (which expects 32-character access keys).
+
+### 5. Storage Priority
+
+The app uses a tiered storage strategy:
+1. **Memory cache** (LRU - fastest)
+2. **R2 object storage** (persistent, CDN-ready)
+3. **Supabase database** (fallback)
+4. **Generate on-demand** (last resort)
 
 ---
 
