@@ -11,10 +11,10 @@
             <span style="color: var(--text-secondary); font-size: 0.875rem;">(Deck {{ current_deck_num }})</span>
         </div>
         
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             {% if viewed_user.id == current_user.id %}
                 <span style="color: var(--text-secondary); font-size: 0.875rem;">Your Decks:</span>
-                {% for d in user_decks %}
+                {% for d in user_decks|sort(attribute='deck_number') %}
                     {% set d_num = d.deck_number %}
                     <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" style="display: inline;">
                         <input type="hidden" name="deck_number" value="{{ d_num }}">
@@ -82,8 +82,10 @@
             <div class="card">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h3 class="card-title">
-                        Vocabulary Deck
-                        <span style="color: var(--text-secondary); font-weight: normal;">(Deck {{ current_deck_num }})</span>
+                        Vocabulary Deck {{ current_deck_num }}
+                        {% if viewed_user.id != current_user.id %}
+                            <span style="color: var(--text-secondary); font-weight: normal;">(Viewing: {{ viewed_user.id[:8] }})</span>
+                        {% endif %}
                     </h3>
                     <span class="badge badge-primary">{{ words|length }} words</span>
                 </div>
@@ -106,8 +108,7 @@
                                         <td>{{ word.pinyin|safe }}</td>
                                         <td>{{ word.translation[:50] }}{% if word.translation|length > 50 %}...{% endif %}</td>
                                         <td>
-                                            <a href="{{ url_for('main.word_detail', character=word.character) }}" 
-                                               class="btn btn-sm btn-secondary">View</a>
+                                            <a href="{{ url_for('main.word_detail', character=word.character) }}" class="btn btn-sm btn-secondary">View</a>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -115,7 +116,7 @@
                             </table>
                         </div>
                     {% else %}
-                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No words in this deck.</p>
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No words in Deck {{ current_deck_num }}.</p>
                     {% endif %}
                 </div>
             </div>

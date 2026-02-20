@@ -1,5 +1,6 @@
 """Main application routes."""
 import io
+from urllib.parse import unquote
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, current_app, session
 from flask_login import login_required, current_user
 
@@ -66,7 +67,7 @@ def switch_deck(deck_number):
     """Switch to a different deck."""
     deck_manager.swap_to_deck(current_user.id, deck_number)
     flash(f'Switched to Deck {deck_number}', 'success')
-    return redirect(url_for('main.dashboard'))
+    return redirect(request.referrer or url_for('main.dashboard'))
 
 
 @main_bp.route('/create-deck', methods=['POST'])
@@ -78,12 +79,12 @@ def create_deck():
     
     if not deck_number or deck_number < 1:
         flash('Invalid deck number', 'error')
-        return redirect(url_for('main.dashboard'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     
     deck_manager.create_deck(current_user.id, deck_number, label)
     deck_manager.set_current_deck(current_user.id, deck_number)
     flash(f'Created and switched to Deck {deck_number}', 'success')
-    return redirect(url_for('main.dashboard'))
+    return redirect(request.referrer or url_for('main.dashboard'))
 
 
 @main_bp.route('/dictionary')
@@ -120,12 +121,10 @@ def dictionary():
                          total=total)
 
 
-@main_bp.route('/word/<path:character>')
+@main_bp.route('/word/<character>')
 @login_required
 def word_detail(character):
     """View word details."""
-    from urllib.parse import unquote
-    
     deck_id = get_current_deck_id()
     
     # URL decode the character (handle encoded Chinese characters)
@@ -136,7 +135,20 @@ def word_detail(character):
     word = next((w for w in words if w.get('character') == decoded_character), None)
     
     if not word:
-        flash(f'Word "{decoded_character}" not found in current deck (Deck {deck_manager.parse_deck_id(deck_id)[1]}).', 'error')
+        # Check if word exists in OTHER decks
+        all_decks = deck_manager.get_user_decks(current_user.id)
+        for deck in all_decks:
+            other_deck_id = deck['deck_id']
+            if other_deck_id != deck_id:
+                other_words = db.get_words_by_user(current_user.id, other_deck_id)
+                other_word = next((w for w in other_words if w.get('character') == decoded_character), None)
+                if other_word:
+                    deck_num = deck['deck_number']
+                    flash(f'Word "{decoded_character}" is in Deck {deck_num}, not Deck {deck_manager.parse_deck_id(deck_id)[1]}. Switching...', 'info')
+                    deck_manager.set_current_deck(current_user.id, deck_num)
+                    return redirect(url_for('main.word_detail', character=character))
+        
+        flash(f'Word "{decoded_character}" not found in any of your decks.', 'error')
         return redirect(url_for('main.dictionary'))
     
     return render_template('word_detail.html', word=word)
@@ -209,7 +221,7 @@ def delete_word(word_id):
     deck_id = get_current_deck_id()
     db.delete_word(word_id, current_user.id, deck_id)
     flash('Word deleted', 'success')
-    return redirect(url_for('main.dictionary'))
+    return redirect(request.referrer or url_for('main.dictionary'))
 
 
 @main_bp.route('/clear-all', methods=['POST'])
