@@ -263,10 +263,11 @@ class Database:
         """Get all words for a user/deck.
         
         Args:
-            user_id: The user ID
-            deck_id: Optional deck ID (e.g., USERID-1, USERID-2). If None, uses user_id
+            user_id: The user ID (or deck ID directly)
+            deck_id: Optional - if provided, used instead of user_id
         """
-        target_id = self._get_target_id(user_id, deck_id)
+        # Simple: just use the provided ID directly
+        target_id = deck_id if deck_id else user_id
         
         if self._client:
             response = self._client.get(f"/words?user_id=eq.{target_id}&order=created_at.desc")
