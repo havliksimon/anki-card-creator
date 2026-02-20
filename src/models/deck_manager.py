@@ -28,7 +28,9 @@ class DeckManager:
         pass
     
     def get_user_decks(self, user_id: str) -> List[Dict]:
-        """Get all decks for a user."""
+        """Get all decks for a user - includes decks with words and user_decks entries."""
+        decks = {}
+        
         if not self._client:
             # Fallback: return default deck
             return [{
@@ -39,26 +41,59 @@ class DeckManager:
             }]
         
         try:
-            response = self._client.get(
-                f"/user_decks?user_id=eq.{user_id}&order=deck_number.asc"
-            )
-            data = response.json()
-            # Ensure we return a list of dicts
-            if isinstance(data, list):
-                # Validate each item is a dict
-                valid_decks = []
-                for d in data:
-                    if isinstance(d, dict) and 'deck_id' in d:
-                        valid_decks.append(d)
-                if valid_decks:
-                    return valid_decks
-            # If no valid decks found, return default
-            return [{
-                'deck_id': f'{user_id}-1',
-                'user_id': user_id,
-                'deck_number': 1,
-                'label': 'Main Deck'
-            }]
+            # Method 1: Get decks from user_decks table
+            try:
+                response = self._client.get(
+                    f"/user_decks?user_id=eq.{user_id}&order=deck_number.asc"
+                )
+                data = response.json()
+                if isinstance(data, list):
+                    for d in data:
+                        if isinstance(d, dict) and 'deck_id' in d:
+                            deck_num = d.get('deck_number', 1)
+                            decks[deck_num] = d
+            except Exception as e:
+                current_app.logger.warning(f"Could not fetch user_decks: {e}")
+            
+            # Method 2: Get decks that have words (check words table)
+            try:
+                # Get all unique user_ids from words table that start with this user's ID
+                # This catches decks like USERID-1, USERID-3, etc.
+                response = self._client.get(
+                    f"/words?user_id=like.{user_id}-*&select=user_id"
+                )
+                data = response.json()
+                if isinstance(data, list):
+                    for word in data:
+                        word_user_id = word.get('user_id', '')
+                        # Parse deck number from user_id-decknumber format
+                        if word_user_id.startswith(f"{user_id}-"):
+                            try:
+                                deck_num = int(word_user_id.split('-')[-1])
+                                if deck_num not in decks:
+                                    decks[deck_num] = {
+                                        'deck_id': word_user_id,
+                                        'user_id': user_id,
+                                        'deck_number': deck_num,
+                                        'label': f'Deck {deck_num}'
+                                    }
+                            except (ValueError, IndexError):
+                                pass
+            except Exception as e:
+                current_app.logger.warning(f"Could not fetch words decks: {e}")
+            
+            # Ensure deck 1 always exists
+            if 1 not in decks:
+                decks[1] = {
+                    'deck_id': f'{user_id}-1',
+                    'user_id': user_id,
+                    'deck_number': 1,
+                    'label': 'Main Deck'
+                }
+            
+            # Return sorted by deck number
+            return [decks[num] for num in sorted(decks.keys())]
+            
         except Exception as e:
             current_app.logger.error(f"Error getting user decks: {e}")
             # Return default deck on error

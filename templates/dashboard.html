@@ -11,16 +11,20 @@
             <span style="color: var(--text-secondary); font-size: 0.875rem;">(Deck {{ deck_number }})</span>
         </div>
         
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <span style="color: var(--text-secondary); font-size: 0.875rem;">Switch Deck:</span>
-            {% for d in decks %}
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">Your Decks:</span>
+            {% for d in decks|sort(attribute='deck_number') %}
                 {% set d_num = d.deck_number %}
                 <form method="POST" action="{{ url_for('main.switch_deck', deck_number=d_num) }}" style="display: inline;">
                     <button type="submit" class="btn btn-sm {% if deck_number == d_num %}btn-primary{% else %}btn-secondary{% endif %}">{{ d_num }}</button>
                 </form>
             {% endfor %}
             
-            <!-- Create New Deck Button -->
+            <!-- Quick Switch to Any Deck -->
+            <form method="POST" action="{{ url_for('main.switch_deck', deck_number=1) }}" style="display: inline; margin-left: 0.5rem;" onsubmit="event.preventDefault(); var num = prompt('Switch to deck number:'); if(num && !isNaN(num)) { this.action = this.action.replace('/1', '/' + num); this.submit(); }">
+                <button type="submit" class="btn btn-sm btn-success" title="Switch to any deck">#?</button>
+            </form>
+            
             <button onclick="document.getElementById('new-deck-modal').style.display='block'" class="btn btn-sm btn-success">+ New</button>
         </div>
     </div>
@@ -34,7 +38,7 @@
     <div class="grid grid-4">
         <div class="card stat-card">
             <div class="stat-value">{{ total_count }}</div>
-            <div class="stat-label">Words in Deck</div>
+            <div class="stat-label">Words in Deck {{ deck_number }}</div>
         </div>
         <div class="card stat-card">
             <div class="stat-value">{{ "%.0f"|format(coverage) }}%</div>
@@ -49,6 +53,29 @@
             <div class="stat-label">To HSK6</div>
         </div>
     </div>
+
+    <!-- All Decks Summary -->
+    {% if decks|length > 1 %}
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">All Your Decks</h3>
+        </div>
+        <div style="padding: 1rem;">
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                {% for d in decks|sort(attribute='deck_number') %}
+                <form method="POST" action="{{ url_for('main.switch_deck', deck_number=d.deck_number) }}" style="display: inline;">
+                    <button type="submit" class="btn {% if deck_number == d.deck_number %}btn-primary{% else %}btn-secondary{% endif %}" style="min-width: 100px;">
+                        Deck {{ d.deck_number }}
+                        {% if d.label and d.label != 'Deck ' + d.deck_number|string %}
+                            <br><small style="font-size: 0.75rem; opacity: 0.8;">{{ d.label }}</small>
+                        {% endif %}
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Quick Actions -->
     <div class="grid grid-3" style="margin-bottom: 2rem;">
@@ -74,7 +101,7 @@
     <!-- Recent Words with Preview -->
     <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="card-title">Recent Words</h3>
+            <h3 class="card-title">Recent Words (Deck {{ deck_number }})</h3>
             <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary btn-sm">View All</a>
         </div>
         
