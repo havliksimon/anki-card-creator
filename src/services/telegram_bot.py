@@ -673,11 +673,25 @@ class TelegramBotService:
             await update.message.reply_text("❌ Please use /start first.")
             return
         
-        # Get all decks
-        decks = self._get_all_decks()
+        base_user_id = user_data['id']
         
-        if not decks:
-            await update.message.reply_text("No decks found.")
+        # Get all decks and filter to only this user's decks
+        all_decks = self._get_all_decks()
+        
+        # Filter decks that belong to this user:
+        # - Main deck: deck_id == base_user_id
+        # - Other decks: deck_id starts with "base_user_id-"
+        user_decks = []
+        for deck in all_decks:
+            deck_id = deck['id']
+            if deck_id == base_user_id or deck_id.startswith(f"{base_user_id}-"):
+                user_decks.append(deck)
+        
+        if not user_decks:
+            await update.message.reply_text(
+                "📚 You don't have any decks yet.\n\n"
+                "Send me some Chinese text to create your first deck!"
+            )
             return
         
         current_deck = self._get_current_deck_id(context)
@@ -685,15 +699,18 @@ class TelegramBotService:
         keyboard = []
         message_text = "📚 *Your Decks*\n\n"
         
-        for deck in decks:
+        for deck in user_decks:
             deck_id = deck['id']
             count = deck['word_count']
             
-            # Extract deck number from full ID for comparison
-            if '-' in deck_id:
+            # Extract deck number from full ID for display
+            if deck_id == base_user_id:
+                deck_num = "1"  # Main deck
+            elif '-' in deck_id:
+                # Extract number from end (format: USERID-N)
                 deck_num = deck_id.rsplit('-', 1)[1]
             else:
-                deck_num = "1"  # Main deck
+                deck_num = "?"
             
             # Check if this is the current deck
             is_current = (current_deck == deck_num) or (current_deck is None and deck_num == "1")
