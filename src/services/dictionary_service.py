@@ -33,9 +33,10 @@ class DictionaryService:
         scraped_data = scraping_service.scrape_word_details(character, progress_callback)
         
         # Unpack the returned tuple (same order as old app)
+        # Now includes anki_usage_examples as 14th field
         pinyin, translation, stroke_gifs, pronunciation, example_link, \
         exemplary_image, meaning, reading, component1, component2, \
-        styled_term, usage_examples, real_usage_examples = scraped_data
+        styled_term, usage_examples, real_usage_examples, anki_usage_examples = scraped_data
         
         # If styled_term is empty, generate it
         if not styled_term:
@@ -54,8 +55,8 @@ class DictionaryService:
             'stroke_gifs': stroke_gifs,
             'pronunciation': pronunciation or self._get_pronunciation_url(character),
             'exemplary_image': exemplary_image,
-            'anki_usage_examples': real_usage_examples,  # Use real examples as anki examples
-            'real_usage_examples': real_usage_examples,
+            'anki_usage_examples': anki_usage_examples,  # Other MDBG entries (field 9)
+            'real_usage_examples': real_usage_examples,  # AI examples from DeepSeek
             'usage_examples': usage_examples,
             'reading': reading,
             'component1': component1,
@@ -94,18 +95,21 @@ class DictionaryService:
             
             # Ensure pronunciation uses correct API URL
             pronunciation = word.get('pronunciation', '')
-            if not pronunciation or '212.227.211.88' in pronunciation:
+            if not pronunciation:
                 pronunciation = self._get_pronunciation_url(character)
             
             example_link = word.get('example_link', '')
             exemplary_image = word.get('exemplary_image', '')
             
-            # Use real_usage_examples as example_usage (same as old app)
-            example_usage = word.get('real_usage_examples', '') or word.get('anki_usage_examples', '')
+            # Field order from old app: example_usage, reading, component2, component1
+            # (Note: based on actual old CSV data, component2 comes before component1)
+            # These fields are mostly legacy/empty in new implementation
+            example_usage = word.get('anki_usage_examples', '')  # Field 9
+            reading = word.get('reading', '')  # Field 10
+            component2 = word.get('component2', '')  # Field 11 (Developer Note text)
+            component1 = word.get('component1', '')  # Field 12 (Developer note styled)
             
-            reading = word.get('reading', '')
-            component1 = word.get('component1', '')
-            component2 = word.get('component2', '')
+            # Real AI-generated examples (field 13)
             real_usage_examples = word.get('real_usage_examples', '')
             
             # Split stroke GIFs by comma and space (old format)
@@ -116,20 +120,11 @@ class DictionaryService:
             # Pad to ensure all 6 columns are present
             stroke_order_fields += [''] * (6 - len(stroke_order_fields))
             
-            # Get APP_URL for stroke order GIF URLs
-            app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
-            
-            # Full URLs for stroke order GIFs
-            full_stroke_urls = []
-            for url in stroke_order_fields:
-                if url and 'dictionary.writtenchinese.com' in url:
-                    # Convert relative URL to full URL
-                    full_url = url.replace('https://dictionary.writtenchinese.com', app_url)
-                    full_stroke_urls.append(full_url)
-                else:
-                    full_stroke_urls.append(url)
-            
-            # CSV row format with APP_URL field before StrokeOrder fields
+            # CSV row format matching old app EXACTLY (based on actual old CSV data):
+            # [character, styled_term, pinyin, translation, meaning, pronunciation, 
+            #  example_link, exemplary_image, example_usage, reading, component2, 
+            #  component1, real_usage_examples] + stroke_order_fields
+            # Note: component2 comes before component1 to match old data
             csv_row = [
                 character,
                 styled_term,
@@ -141,10 +136,10 @@ class DictionaryService:
                 exemplary_image,
                 example_usage,
                 reading,
-                component1,
                 component2,
+                component1,
                 real_usage_examples
-            ] + full_stroke_urls
+            ] + stroke_order_fields
             
             writer.writerow(csv_row)
         

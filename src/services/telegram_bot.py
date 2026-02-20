@@ -239,30 +239,71 @@ class TelegramBotService:
         return "\n".join(lines)
     
     def _export_to_csv(self, user_id: str) -> bytes:
-        """Export user's dictionary to CSV bytes."""
+        """Export user's dictionary to CSV bytes - matches old app format EXACTLY."""
         words = db.get_words_by_user(user_id)
         
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Write header
-        writer.writerow([
-            'Character', 'Pinyin', 'Translation', 'Meaning',
-            'Stroke GIFs', 'Pronunciation', 'Image', 'Examples'
-        ])
+        # NO HEADER - matches old app exactly (old app commented out the header line)
         
-        # Write words
+        # Process each word exactly like the old app
         for word in words:
-            writer.writerow([
-                word.get('character', ''),
-                word.get('pinyin', ''),
-                word.get('translation', ''),
-                word.get('meaning', ''),
-                word.get('stroke_gifs', ''),
-                word.get('pronunciation', ''),
-                word.get('exemplary_image', ''),
-                word.get('anki_usage_examples', '')
-            ])
+            character = word.get('character', '')
+            styled_term = word.get('styled_term', '')
+            pinyin = word.get('pinyin', '')
+            translation = word.get('translation', '')
+            meaning = word.get('meaning', '')
+            
+            # Ensure pronunciation uses correct API URL (old app used 212.227.211.88:80)
+            pronunciation = word.get('pronunciation', '')
+            if not pronunciation:
+                pronunciation = dictionary_service._get_pronunciation_url(character)
+            
+            example_link = word.get('example_link', '')
+            exemplary_image = word.get('exemplary_image', '')
+            
+            # Field order from old app: example_usage, reading, component2, component1
+            # (Note: based on actual old CSV data, component2 comes before component1)
+            # These fields are mostly legacy/empty in new implementation
+            example_usage = word.get('anki_usage_examples', '')  # Field 9
+            reading = word.get('reading', '')  # Field 10
+            component2 = word.get('component2', '')  # Field 11 (Developer Note text)
+            component1 = word.get('component1', '')  # Field 12 (Developer note styled)
+            
+            # Real AI-generated examples (field 13)
+            real_usage_examples = word.get('real_usage_examples', '')
+            
+            # Split stroke GIFs by comma and space (old format)
+            stroke_gifs = word.get('stroke_gifs', '')
+            stroke_order_list = stroke_gifs.split(", ") if stroke_gifs else []
+            stroke_order_fields = stroke_order_list[:6]  # Limit to 6
+            
+            # Pad to ensure all 6 columns are present
+            stroke_order_fields += [''] * (6 - len(stroke_order_fields))
+            
+            # CSV row format matching old app EXACTLY (based on actual old CSV data):
+            # [character, styled_term, pinyin, translation, meaning, pronunciation, 
+            #  example_link, exemplary_image, example_usage, reading, component2, 
+            #  component1, real_usage_examples] + stroke_order_fields
+            # Note: component2 comes before component1 to match old data
+            csv_row = [
+                character,
+                styled_term,
+                pinyin,
+                translation,
+                meaning,
+                pronunciation,
+                example_link,
+                exemplary_image,
+                example_usage,
+                reading,
+                component2,
+                component1,
+                real_usage_examples
+            ] + stroke_order_fields
+            
+            writer.writerow(csv_row)
         
         return output.getvalue().encode('utf-8')
     
@@ -508,10 +549,10 @@ class TelegramBotService:
             
             example_link = word.get('example_link', '')
             exemplary_image = word.get('exemplary_image', '')
-            example_usage = word.get('real_usage_examples', '') or word.get('anki_usage_examples', '')
+            example_usage = word.get('anki_usage_examples', '')
             reading = word.get('reading', '')
-            component1 = word.get('component1', '')
-            component2 = word.get('component2', '')
+            component2 = word.get('component2', '')  # Field 11
+            component1 = word.get('component1', '')  # Field 12
             real_usage_examples = word.get('real_usage_examples', '')
             
             stroke_gifs = word.get('stroke_gifs', '')
@@ -520,6 +561,7 @@ class TelegramBotService:
             stroke_order_fields += [''] * (6 - len(stroke_order_fields))
             
             # Old format - no APP_URL prefix
+            # Note: component2 comes before component1 to match old data
             csv_row = [
                 character,
                 styled_term,
@@ -531,8 +573,8 @@ class TelegramBotService:
                 exemplary_image,
                 example_usage,
                 reading,
-                component1,
                 component2,
+                component1,
                 real_usage_examples
             ] + stroke_order_fields
             
@@ -672,6 +714,9 @@ class TelegramBotService:
             await update.message.reply_text("⏳ Your account is pending approval.")
             return
         
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
         args = context.args
         if not args:
             await update.message.reply_text(
@@ -683,9 +728,10 @@ class TelegramBotService:
             )
             return
         
-        words = db.get_words_by_user(user_data['id'])
+        words = db.get_words_by_user(deck_id)
         if not words:
-            await update.message.reply_text("📚 Your dictionary is empty.")
+            deck_name = "main deck" if deck_id == user_data['id'] else f"current deck"
+            await update.message.reply_text(f"📚 Your {deck_name} is empty.")
             return
         
         target = args[0]
@@ -695,7 +741,7 @@ class TelegramBotService:
             idx = int(target) - 1  # 1-based to 0-based
             if 0 <= idx < len(words):
                 word = words[idx]
-                db.delete_word(word['id'], user_data['id'])
+                db.delete_word(word['id'], deck_id)
                 await update.message.reply_text(f"✅ Removed: {word['character']}")
             else:
                 await update.message.reply_text(f"❌ Invalid index. Use 1-{len(words)}")
@@ -704,12 +750,12 @@ class TelegramBotService:
             found = False
             for word in words:
                 if word['character'] == target:
-                    db.delete_word(word['id'], user_data['id'])
+                    db.delete_word(word['id'], deck_id)
                     await update.message.reply_text(f"✅ Removed: {target}")
                     found = True
                     break
             if not found:
-                await update.message.reply_text(f"❌ Word '{target}' not found.")
+                await update.message.reply_text(f"❌ Word '{target}' not found in this deck.")
     
     async def cmd_rm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /rm command (alias for /rmdict)."""
@@ -724,6 +770,9 @@ class TelegramBotService:
             await update.message.reply_text("❌ Please use /start first.")
             return
         
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
         args = context.args
         if not args:
             await update.message.reply_text(
@@ -734,7 +783,7 @@ class TelegramBotService:
             return
         
         query = args[0].lower()
-        words = db.get_words_by_user(user_data['id'])
+        words = db.get_words_by_user(deck_id)
         
         results = []
         for i, word in enumerate(words, 1):
@@ -1045,23 +1094,33 @@ class TelegramBotService:
             )
             return
         
-        # Check for existing words in user's dictionary
-        words = db.get_words_by_user(user_data['id'])
+        # Get current deck ID
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
+        # Check for existing words in the CURRENT deck (not all decks)
+        words = db.get_words_by_user(deck_id)
         existing_chars = {w['character'] for w in words}
         
         new_words = [w for w in chinese_words if w not in existing_chars]
         skipped = [w for w in chinese_words if w in existing_chars]
         
         if not new_words:
+            deck_name = "main deck" if deck_id == user_data['id'] else f"deck {deck_id[:8]}..."
             await update.message.reply_text(
-                f"📚 All {len(chinese_words)} words are already in your dictionary!\n"
+                f"📚 All {len(chinese_words)} words are already in your {deck_name}!\n"
                 f"Use /dictionary to see them."
             )
             return
         
-        # Check if words exist in other users' dictionaries (global lookup)
-        # If so, copy them instead of scraping again
+        # Check if words exist in other decks or users (to copy data instead of scraping)
         global_words = {}
+        # First check all decks of current user
+        all_user_words = db.get_words_by_user(user_data['id'])
+        for w in all_user_words:
+            if w['character'] in new_words and w['character'] not in global_words:
+                global_words[w['character']] = w
+        
+        # Then check other users' dictionaries
         all_users = db.get_users()
         for other_user in all_users:
             if other_user['id'] != user_data['id']:
@@ -1070,7 +1129,7 @@ class TelegramBotService:
                     if w['character'] in new_words and w['character'] not in global_words:
                         global_words[w['character']] = w
         
-        # Words to scrape (not in any user's dictionary)
+        # Words to scrape (not found anywhere)
         words_to_scrape = [w for w in new_words if w not in global_words]
         words_to_copy = [w for w in new_words if w in global_words]
         
@@ -1082,8 +1141,39 @@ class TelegramBotService:
         
         added = []
         failed = []
+        copied = []
         
-        for i, word_text in enumerate(new_words):
+        # First, copy words that already exist in other decks/users (no scraping needed)
+        for word_text in words_to_copy:
+            try:
+                source_word = global_words[word_text]
+                # Copy word details and update user_id to current deck
+                word_details = {
+                    'character': source_word['character'],
+                    'pinyin': source_word.get('pinyin', ''),
+                    'styled_term': source_word.get('styled_term', ''),
+                    'translation': source_word.get('translation', ''),
+                    'meaning': source_word.get('meaning', ''),
+                    'stroke_gifs': source_word.get('stroke_gifs', ''),
+                    'pronunciation': source_word.get('pronunciation', ''),
+                    'exemplary_image': source_word.get('exemplary_image', ''),
+                    'anki_usage_examples': source_word.get('anki_usage_examples', ''),
+                    'real_usage_examples': source_word.get('real_usage_examples', ''),
+                    'reading': source_word.get('reading', ''),
+                    'component1': source_word.get('component1', ''),
+                    'component2': source_word.get('component2', ''),
+                    'example_link': source_word.get('example_link', ''),
+                    'user_id': deck_id  # Use current deck ID
+                }
+                db.create_word(word_details)
+                copied.append(word_text)
+            except Exception as e:
+                logger.error(f"Error copying word {word_text}: {e}")
+                # Will try to scrape instead
+                words_to_scrape.append(word_text)
+        
+        # Then scrape words that don't exist anywhere
+        for i, word_text in enumerate(words_to_scrape):
             try:
                 # Create progress callback for this word (sync wrapper for async edit_text)
                 import asyncio
@@ -1091,7 +1181,7 @@ class TelegramBotService:
                 async def edit_progress(stage: str, message: str):
                     try:
                         progress_text = (
-                            f"⏳ Processing {i+1}/{len(new_words)}: {word_text}\n"
+                            f"⏳ Processing {i+1}/{len(words_to_scrape)}: {word_text}\n"
                             f"{message}"
                         )
                         await status_message.edit_text(progress_text)
@@ -1106,7 +1196,7 @@ class TelegramBotService:
                 asyncio.create_task(edit_progress("start", f"🔄 Starting scrape for {word_text}..."))
                 
                 word_details = dictionary_service.get_word_details(word_text, progress_callback)
-                word_details['user_id'] = user_data['id']
+                word_details['user_id'] = deck_id  # Use current deck ID, not main user ID
                 db.create_word(word_details)
                 added.append(word_text)
                 
@@ -1129,9 +1219,14 @@ class TelegramBotService:
                     pass
         
         # Update status message
-        result_text = f"✅ Added {len(added)} words!\n"
+        total_added = len(added) + len(copied)
+        result_text = f"✅ Added {total_added} words!\n"
+        if copied:
+            result_text += f"📋 Copied {len(copied)} from existing\n"
+        if added:
+            result_text += f"🔍 Scraped {len(added)} new\n"
         if skipped:
-            result_text += f"⏭️ Skipped {len(skipped)} existing\n"
+            result_text += f"⏭️ Skipped {len(skipped)} existing in this deck\n"
         if failed:
             result_text += f"❌ Failed: {len(failed)}\n"
         

@@ -4,7 +4,10 @@ import re
 import urllib.parse
 import threading
 import traceback
+import json
 import time
+import asyncio
+import concurrent.futures
 from typing import List, Dict, Tuple, Optional
 from bs4 import BeautifulSoup
 
@@ -16,6 +19,9 @@ try:
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+
+# Thread pool for running Playwright in async contexts
+_playwright_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 
 tone_colors = {
@@ -41,6 +47,7 @@ def get_tone_number(syllable):
 
 
 def chinese_to_styled_texts(chinese_str):
+    """Convert Chinese string to styled pinyin and hanzi with tone colors."""
     pinyin_list = []
     char_list = []
     
@@ -61,6 +68,53 @@ def chinese_to_styled_texts(chinese_str):
         char_list.append(styled_char)
     
     return ' '.join(pinyin_list), ''.join(char_list)
+
+
+def chinese_to_styled_texts_corrected(chinese_str):
+    """
+    Converts a Chinese string into styled Pinyin and styled Hanzi characters
+    with tone-based coloring. Handles punctuation and whitespace correctly.
+    """
+    try:
+        import pypinyin
+        from pypinyin import Style
+        
+        pinyin_list_of_lists = pypinyin.pinyin(
+            chinese_str, 
+            style=Style.TONE, 
+            heteronym=False, 
+            errors='neutralize'
+        )
+    except:
+        # Fallback if pypinyin not available
+        return chinese_str, chinese_str
+
+    pinyin_spans = []
+    char_spans = []
+
+    for char_in_word, pinyin_syllables_for_char in zip(chinese_str, pinyin_list_of_lists):
+        if not pinyin_syllables_for_char:
+            pinyin_spans.append(char_in_word)
+            char_spans.append(char_in_word)
+            continue
+
+        syllable = pinyin_syllables_for_char[0]
+
+        if char_in_word == syllable:
+            pinyin_spans.append(char_in_word)
+            char_spans.append(char_in_word)
+        else:
+            tone = get_tone_number(syllable)
+            color = tone_colors.get(tone, tone_colors[0])
+
+            if color != tone_colors[0]:
+                pinyin_spans.append(f'<span style="color:{color}">{syllable}</span>')
+                char_spans.append(f'<span style="color:{color}">{char_in_word}</span>')
+            else:
+                pinyin_spans.append(syllable)
+                char_spans.append(char_in_word)
+
+    return ' '.join(pinyin_spans), ''.join(char_spans)
 
 
 def style_scraped_pinyin(pinyin_list, word_str):
@@ -140,6 +194,85 @@ def cache_audio(audio_url):
         print(f"Error caching audio: {e}")
 
 
+def get_deepseek_chinese_sentences(deepseek_api_key: str, chinese_word: str) -> List[Dict]:
+    """
+    Get 3 AI-generated example sentences from DeepSeek API.
+    Returns list of dicts with 'chinese', 'pinyin', 'english' keys.
+    """
+    if not deepseek_api_key:
+        print("No DeepSeek API key provided")
+        return []
+    
+    url = "https://api.deepseek.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {deepseek_api_key}"
+    }
+    prompt = f"""Please provide three exemplary Chinese sentences using the word "{chinese_word}". Ensure that the vocabulary used in these sentences is at the same or a lower HSK level than "{chinese_word}". For each Chinese sentence, provide its Pinyin on the next line starting with "Pinyin: ", and its English translation on the following line starting with "Translation: ". Return the result as a JSON array where each element is an object with "chinese", "pinyin", and "english" keys."""
+    
+    data = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "n": 1
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        response.raise_for_status()
+        json_response = response.json()
+        
+        if 'choices' in json_response and len(json_response['choices']) > 0 and 'message' in json_response['choices'][0] and 'content' in json_response['choices'][0]['message']:
+            content = json_response['choices'][0]['message']['content']
+
+            try:
+                json_start = content.find('[')
+                json_end = content.rfind(']')
+
+                if json_start != -1 and json_end != -1 and json_start < json_end:
+                    content = content[json_start:json_end + 1]
+                
+                results = json.loads(content)
+                if isinstance(results, list) and len(results) == 3 and all(isinstance(item, dict) and 'chinese' in item and 'pinyin' in item and 'english' in item for item in results):
+                    return results
+                else:
+                    print(f"Unexpected format of the response content: {content}")
+                    return []
+
+            except json.JSONDecodeError:
+                lines = content.strip().split('\n')
+                if len(lines) >= 9:
+                    parsed_results = []
+                    for i in range(0, len(lines) - 2, 3):
+                        chinese_match = re.search(r'"chinese": "(.*)"', lines[i])
+                        pinyin_match = re.search(r'"pinyin": "(.*)"', lines[i + 1])
+                        english_match = re.search(r'"english": "(.*)"', lines[i + 2])
+                        if chinese_match and pinyin_match and english_match:
+                            parsed_results.append({
+                                "chinese": chinese_match.group(1),
+                                "pinyin": pinyin_match.group(1),
+                                "english": english_match.group(1)
+                            })
+                    if len(parsed_results) == 3:
+                        return parsed_results
+                    else:
+                        print(f"Could not parse content into expected format: {content}")
+                        return []
+                else:
+                    print(f"Could not split response into three sets of information: {content}")
+                    return []
+        else:
+            print(f"Unexpected structure in the API response: {json_response}")
+            return []
+    except requests.exceptions.RequestException as e:
+        print(f"Error communicating with the DeepSeek API: {e}")
+        return []
+    except Exception as e:
+        print(f"An unexpected error occurred in DeepSeek API: {e}")
+        return []
+
+
 class ScrapingService:
     def __init__(self):
         self.session = requests.Session()
@@ -170,66 +303,6 @@ class ScrapingService:
             except:
                 pass
             self.playwright = None
-
-    def scrape_chinese_sentences(self, word: str) -> List[Dict]:
-        url = f"https://www.chineseboost.com/chinese-example-sentences?query={urllib.parse.quote(word)}"
-        
-        try:
-            resp = self.session.get(url, timeout=15)
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            cards = soup.find_all('div', class_='card')
-            
-            data = []
-            for card in cards:
-                try:
-                    liju = card.find('div', class_='liju')
-                    if not liju:
-                        continue
-                    
-                    hanzi_element = liju.find('p', class_='hanzi')
-                    pinyin_element = liju.find('p', class_='pinyin')
-                    translation_element = liju.find('p', class_='yingwen')
-                    
-                    if not (hanzi_element and pinyin_element and translation_element):
-                        continue
-                    
-                    hanzi_html = hanzi_element.decode_contents() if hanzi_element else ''
-                    chinese_sentence = extract_plain_hanzi(hanzi_html)
-                    styled_hanzi = convert_hanzi_to_styled(hanzi_html)
-                    
-                    pinyin_html = pinyin_element.decode_contents() if pinyin_element else ''
-                    styled_pinyin = convert_pinyin_to_styled(pinyin_html)
-                    
-                    translation = translation_element.get_text().strip()
-                    
-                    source = {'name': '', 'url': ''}
-                    try:
-                        source_span = liju.find('small', class_='text-muted')
-                        if source_span:
-                            a = source_span.find('a')
-                            if a:
-                                source = {
-                                    'name': a.get_text().strip(),
-                                    'url': a.get('href', '').strip()
-                                }
-                    except:
-                        pass
-                    
-                    data.append({
-                        'chinese_sentence': chinese_sentence,
-                        'styled_pinyin': styled_pinyin,
-                        'styled_hanzi': styled_hanzi,
-                        'translation': translation,
-                        'source_name': source['name'],
-                        'source_link': source['url']
-                    })
-                except Exception as e:
-                    print(f"Error processing card: {e}")
-            
-            return data
-        except Exception as e:
-            print(f"Error scraping ChineseBoost: {e}")
-            return []
 
     def scrape_mdbg(self, character: str) -> List[Dict]:
         url = f"https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={urllib.parse.quote(character)}"
@@ -291,7 +364,8 @@ class ScrapingService:
             print(f"MDBG scraping failed: {e}")
             return []
 
-    def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
+    def _scrape_writtenchinese_sync(self, character: str) -> Tuple[str, List[str]]:
+        """Synchronous implementation of Written Chinese scraping."""
         if not PLAYWRIGHT_AVAILABLE:
             print("Playwright not available, skipping WrittenChinese")
             return "", []
@@ -308,13 +382,16 @@ class ScrapingService:
             stroke_order_urls = []
             
             try:
+                # Go to Written Chinese dictionary
                 page.goto('https://dictionary.writtenchinese.com')
                 page.wait_for_load_state('domcontentloaded')
                 
+                # Search for the character
                 page.fill('#searchKey', character)
                 page.press('#searchKey', 'Enter')
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(3000)
                 
+                # Look for "Learn more" link
                 links = page.query_selector_all('a.learn-more-link')
                 worddetail_href = None
                 for link in links:
@@ -327,22 +404,30 @@ class ScrapingService:
                     page.close()
                     return "", []
                 
+                # Navigate to word detail page
                 page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}')
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(3000)
                 
-                symbol = page.query_selector('div.symbol-layer')
-                if symbol:
-                    imgs = symbol.query_selector_all('img')
-                    stroke_order_urls = [
-                        img.get_attribute('src') for img in imgs
-                        if img.get_attribute('src') and 'giffile' in img.get_attribute('src')
-                    ]
+                # Extract stroke order GIFs from symbol-layer
+                try:
+                    gif_elements = page.query_selector_all('div.symbol-layer img')
+                    for gif in gif_elements:
+                        src = gif.get_attribute('src')
+                        if src and 'giffile.action' in src:
+                            # Ensure full URL
+                            if src.startswith('http'):
+                                stroke_order_urls.append(src)
+                            else:
+                                stroke_order_urls.append(f'https://dictionary.writtenchinese.com{src}')
+                except Exception as e:
+                    print(f"Error extracting stroke GIFs: {e}")
                 
+                # For multi-character words, extract individual character meanings
                 if len(str(character)) > 1:
                     try:
-                        table = page.query_selector('table.with-flex')
-                        if table:
-                            rows = table.query_selector_all('tr')[1:]
+                        character_table = page.query_selector('table.with-flex')
+                        if character_table:
+                            rows = character_table.query_selector_all('tr')[1:]  # Skip header
                             for row in rows:
                                 try:
                                     char_cell = row.query_selector('td.smbl-cstm-wrp.word span')
@@ -362,6 +447,18 @@ class ScrapingService:
                                     continue
                     except Exception as e:
                         print(f"Error getting meanings table: {e}")
+                else:
+                    # For single character, get the definition
+                    try:
+                        definition_element = page.query_selector('td.txt-cell')
+                        if definition_element:
+                            meaning = definition_element.inner_text()
+                            styled_pinyin, styled_char = chinese_to_styled_texts(character)
+                            entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
+                            if entry not in meanings_list:
+                                meanings_list.append(entry)
+                    except:
+                        pass
                 
             finally:
                 page.close()
@@ -371,55 +468,49 @@ class ScrapingService:
             
         except Exception as e:
             print(f"WrittenChinese scraping failed: {e}")
+            traceback.print_exc()
             return "", []
 
+    def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
+        """
+        Scrape stroke order GIFs from Written Chinese dictionary.
+        Handles both sync and async contexts.
+        Returns: (meaning, stroke_order_urls)
+        """
+        # Check if we're in an async context
+        try:
+            asyncio.get_running_loop()
+            # We're in an async context - run in thread pool
+            future = _playwright_executor.submit(self._scrape_writtenchinese_sync, character)
+            return future.result(timeout=60)
+        except RuntimeError:
+            # No running loop - run directly
+            return self._scrape_writtenchinese_sync(character)
+
     def scrape_word_details(self, character: str, progress_callback=None) -> Tuple:
+        """
+        Scrape all word details.
+        Returns: (pinyin, definition, stroke_order, audio_url, example_link, 
+                  exemplary_image, meaning, reading, component1, component2, 
+                  styled_term, usage_examples_json_str, real_usage_examples_html)
+        """
         def report(stage, message):
             if progress_callback:
                 progress_callback(stage, message)
         
         try:
-            report("chineseboost", f"🔍 Scraping ChineseBoost for {character}...")
-            reading_results = self.scrape_chinese_sentences(character)
-            
-            component2 = ""
-            reading = ""
             app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
             tts_api_url = f"{app_url}/api/tts"
+            deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY', '')
             
-            if reading_results:
-                try:
-                    component2_parts = []
-                    for i in range(min(6, len(reading_results))):
-                        audio_url = f"{tts_api_url}?hanzi={quote(reading_results[i]['chinese_sentence'])}"
-                        part = f"""{reading_results[i]['styled_hanzi']}<br>{reading_results[i]['styled_pinyin']}<button id=\"button{i+1}\" onclick=\"document.getElementById('audio{i+1}').play()\" style=\"padding: 5px 10px; background: var(--button-bg); color: var(--button-text); font-size: 16px; cursor: pointer; vertical-align: middle;\">▶</button><audio id=\"audio{i+1}\" src=\"{audio_url}\" preload=\"auto\"></audio><br>{reading_results[i]['translation']}"""
-                        component2_parts.append(part)
-                    component2 = '<div style="text-align: center;">Developer note: work in progress<br><br>' + "<br><br>".join(component2_parts) + '</div>'
-                except Exception as e:
-                    print(f"Error building component2: {e}")
-                
-                try:
-                    reading_parts = []
-                    for i in range(min(6, len(reading_results))):
-                        part = f"{reading_results[i]['styled_hanzi']}<br>{reading_results[i]['styled_pinyin']}<br>"
-                        reading_parts.append(part)
-                    reading = '<div style="text-align: center;">Developer note: work in progress<br><br>' + "<br><br>".join(reading_parts) + '</div>'
-                except Exception as e:
-                    print(f"Error building reading: {e}")
-            
+            # Scrape MDBG for basic word info
             report("mdbg", f"📖 Scraping MDBG for {character}...")
             results = self.scrape_mdbg(character)
             
             if not results:
                 return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
             
-            report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
-            meaning, stroke_urls = self.scrape_writtenchinese(character)
-            if stroke_urls:
-                # Make URLs absolute
-                abs_urls = [f'https://dictionary.writtenchinese.com{url}' for url in stroke_urls]
-                results[0]['stroke_order'] = ", ".join(abs_urls)
-            
+            # Reorder results to prioritize exact match
             try:
                 if results[0]["term"] != character:
                     result_candidates = []
@@ -442,6 +533,13 @@ class ScrapingService:
             except Exception as e:
                 print(f"Error reordering results: {e}")
             
+            # Scrape Written Chinese for stroke GIFs and meaning
+            report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
+            meaning, stroke_urls = self.scrape_writtenchinese(character)
+            if stroke_urls:
+                results[0]['stroke_order'] = ", ".join(stroke_urls)
+            
+            # Get exemplary image from Unsplash
             report("unsplash", f"🖼️ Fetching image from Unsplash for {character}...")
             exemplary_image = ""
             unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
@@ -465,28 +563,92 @@ class ScrapingService:
             
             results[0]['exemplary_image'] = exemplary_image
             
-            component1 = 'Developer Note: "Reading" card type is still work in progress (will be fixed by standard importing of cards in the near future)'
+            # Generate AI example sentences using DeepSeek
+            report("deepseek", f"🤖 Generating AI examples for {character}...")
+            ai_examples = []
+            deepseek_results = []
             
-            real_usage_examples = []
-            for idx, result in enumerate(reading_results[:6], 1):
-                audio_url = f"{tts_api_url}?hanzi={quote(result['chinese_sentence'])}"
-                html = f'''<div style="margin-bottom: 20px;">
-<div style="font-size: 20px; font-weight: bold;">{result['styled_hanzi']}</div>
+            if deepseek_api_key:
+                try:
+                    deepseek_data = get_deepseek_chinese_sentences(deepseek_api_key, character)
+                    if deepseek_data and len(deepseek_data) == 3:
+                        for i, item in enumerate(deepseek_data):
+                            chinese_sentence = item.get('chinese', '')
+                            english = item.get('english', '')
+                            
+                            # Style the Chinese sentence
+                            styled_pinyin, styled_chinese = chinese_to_styled_texts_corrected(chinese_sentence)
+                            
+                            # Build audio URL
+                            audio_url = f"{tts_api_url}?hanzi={quote(chinese_sentence)}"
+                            
+                            deepseek_results.append({
+                                'chinese': styled_chinese,
+                                'pinyin': styled_pinyin,
+                                'english': english,
+                                'audio_url': audio_url
+                            })
+                            
+                            # Build HTML for real_usage_examples
+                            html = f'''<div style="margin-bottom: 20px;">
+<div style="font-size: 20px; font-weight: bold;">{styled_chinese}</div>
 <div style="font-size: 18px; display: inline-block;">
-<span style="font-size: 20px; font-weight: bold;">{result['styled_pinyin']} </span>
+<span style="font-size: 20px; font-weight: bold;">{styled_pinyin} </span>
+</div>
+<button id="button{i+1}" onclick="document.getElementById('audio{i+1}').play()" 
+    style="padding: 5px 10px; background: var(--button-bg); color: var(--button-text); 
+    font-size: 16px; cursor: pointer; vertical-align: middle;">▶</button>
+<audio id="audio{i+1}" src="{audio_url}" preload="auto"></audio>
+<div style="font-size: 16px; margin-top: 10px;">{english}</div>
+</div>'''
+                            ai_examples.append(html)
+                            
+                        # Trigger audio caching
+                        for item in deepseek_results:
+                            threading.Thread(target=cache_audio, args=(item['audio_url'],)).start()
+                except Exception as e:
+                    print(f"Error generating AI examples: {e}")
+                    traceback.print_exc()
+            
+            # Build real_usage_examples HTML (from DeepSeek AI examples)
+            real_usage_examples_str = ''.join(ai_examples)
+            
+            # Build anki_usage_examples from OTHER MDBG results (results[1:])
+            # This contains alternative dictionary entries formatted as HTML
+            anki_usage_examples_parts = []
+            for idx, result in enumerate(results[1:6], 1):  # Get up to 5 other results
+                audio_url = f"{tts_api_url}?hanzi={quote(result['term'])}"
+                html = f'''<div style="margin-bottom: 20px;">
+<div style="font-size: 20px; font-weight: bold;">{result['styled_term']}</div>
+<div style="font-size: 18px; display: inline-block;">
+<span style="font-size: 20px; font-weight: bold;">{result['pinyin']} </span>
 </div>
 <button id="button{idx}" onclick="document.getElementById('audio{idx}').play()" 
     style="padding: 5px 10px; background: var(--button-bg); color: var(--button-text); 
     font-size: 16px; cursor: pointer; vertical-align: middle;">▶</button>
 <audio id="audio{idx}" src="{audio_url}" preload="auto"></audio>
-<div style="font-size: 16px; margin-top: 10px;">{result['translation']}</div>
+<div style="font-size: 16px; margin-top: 10px;">{result['definition']}</div>
 </div>'''
-                real_usage_examples.append(html)
+                anki_usage_examples_parts.append(html)
+                # Trigger audio caching for this term
+                threading.Thread(target=cache_audio, args=(audio_url,)).start()
             
-            real_usage_examples_str = ''.join(real_usage_examples)
+            anki_usage_examples_str = ''.join(anki_usage_examples_parts)
+            
+            # Chinese Boost reading_results is now empty (deprecated)
+            reading_results = []
+            
+            # Build component1 and component2 (legacy fields, kept empty or minimal)
+            component1 = 'Developer Note: "Reading" card type is still work in progress (will be fixed by standard importing of cards in the near future)'
+            component2 = ""
+            reading = ""
             
             report("done", f"✅ {character} complete!")
             
+            # Return format matching old app exactly:
+            # (pinyin, definition, stroke_order, audio_url, example_link, exemplary_image, 
+            #  meaning, reading, component1, component2, styled_term, 
+            #  usage_examples_json_str, real_usage_examples_html, anki_usage_examples_html)
             return (
                 results[0]["pinyin"],
                 results[0]['definition'],
@@ -499,8 +661,9 @@ class ScrapingService:
                 component1,
                 component2,
                 results[0]["styled_term"],
-                str(reading_results),
-                real_usage_examples_str
+                str(reading_results),  # Empty list as string (Chinese Boost removed)
+                real_usage_examples_str,  # AI-generated examples from DeepSeek
+                anki_usage_examples_str  # Other MDBG dictionary entries
             )
             
         except Exception as e:
