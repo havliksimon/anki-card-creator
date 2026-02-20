@@ -62,36 +62,35 @@ def main():
         print("Memory optimized for 0.5GB RAM")
         print("="*60)
         
-        # Start Telegram bot first
+        # Start Telegram bot in main thread (required for signal handlers)
         from app import app
         from threading import Thread
         import logging
+        import time
         
         # Initialize database for bot
         from src.models.database import db
         from src.services.telegram_bot import telegram_bot
         db.init_app(app)
         
-        # Start bot in background thread
-        def run_bot():
-            with app.app_context():
-                telegram_bot.run()
+        # Start Flask in background thread for health checks
+        def run_flask():
+            log = logging.getLogger('werkzeug')
+            log.setLevel(logging.ERROR)
+            port = os.environ.get('PORT', '8000')
+            app.run(host='0.0.0.0', port=int(port), threaded=True, debug=False, use_reloader=False)
         
-        bot_thread = Thread(target=run_bot, daemon=True)
-        bot_thread.start()
-        print("Telegram bot started")
+        flask_thread = Thread(target=run_flask, daemon=True)
+        flask_thread.start()
         
-        # Start minimal web server for health checks in main thread
-        port = os.environ.get('PORT', '8000')
+        print("Health check server started")
+        print("Waiting for server...")
+        time.sleep(3)
         
-        # Reduce logging to save memory
-        log = logging.getLogger('werkzeug')
-        log.setLevel(logging.ERROR)
-        
-        print(f"Health check server starting on port {port}")
-        
-        # Run Flask for health checks (this blocks)
-        app.run(host='0.0.0.0', port=int(port), threaded=True, debug=False)
+        # Run bot in main thread (required for asyncio signal handlers)
+        print("Starting Telegram bot in main thread...")
+        with app.app_context():
+            telegram_bot.run()
 
 if __name__ == '__main__':
     main()
