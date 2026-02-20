@@ -386,23 +386,24 @@ class ScrapingService:
         try:
             p = self._get_playwright()
             if not p or not self.browser:
+                print("Browser not initialized")
                 return "", []
             
             page = self.browser.new_page()
-            page.set_default_timeout(30000)
+            # Increased timeout for Koyeb's limited resources (60 seconds)
+            page.set_default_timeout(60000)
             
             meanings_list = []
             stroke_order_urls = []
             
             try:
                 # Go to Written Chinese dictionary
-                page.goto('https://dictionary.writtenchinese.com')
-                page.wait_for_load_state('domcontentloaded')
+                page.goto('https://dictionary.writtenchinese.com', wait_until='domcontentloaded')
                 
                 # Search for the character
                 page.fill('#searchKey', character)
                 page.press('#searchKey', 'Enter')
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(2000)  # Reduced wait time
                 
                 # Look for "Learn more" link
                 links = page.query_selector_all('a.learn-more-link')
@@ -414,12 +415,13 @@ class ScrapingService:
                         break
                 
                 if not worddetail_href:
+                    print(f"No worddetail link found for {character}")
                     page.close()
                     return "", []
                 
                 # Navigate to word detail page
-                page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}')
-                page.wait_for_timeout(3000)
+                page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded')
+                page.wait_for_timeout(2000)  # Reduced wait time
                 
                 # Extract stroke order GIFs from symbol-layer
                 try:
@@ -495,7 +497,8 @@ class ScrapingService:
             asyncio.get_running_loop()
             # We're in an async context - run in thread pool
             future = _playwright_executor.submit(self._scrape_writtenchinese_sync, character)
-            return future.result(timeout=60)
+            # Increased timeout for Koyeb (90 seconds total)
+            return future.result(timeout=90)
         except RuntimeError:
             # No running loop - run directly
             return self._scrape_writtenchinese_sync(character)
@@ -548,11 +551,18 @@ class ScrapingService:
             
             # Scrape Written Chinese for stroke GIFs and meaning
             report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
-            meaning, stroke_urls = self.scrape_writtenchinese(character)
-            if not stroke_urls:
-                # CRITICAL: Stroke GIFs are required - fail if not found
-                raise Exception(f"CRITICAL: No stroke GIFs found for {character}. Scraping failed.")
-            results[0]['stroke_order'] = ", ".join(stroke_urls)
+            try:
+                meaning, stroke_urls = self.scrape_writtenchinese(character)
+                if not stroke_urls:
+                    # CRITICAL: Stroke GIFs are required - fail if not found
+                    raise Exception(f"CRITICAL: No stroke GIFs found for {character}. Scraping failed.")
+                results[0]['stroke_order'] = ", ".join(stroke_urls)
+            except Exception as e:
+                print(f"WrittenChinese scraping failed: {e}")
+                # Return with error indication - all 14 fields must be present
+                return (
+                    "", "", "", "", "", "", "", "", "", "", "", "[]", "", ""
+                )
             
             # Get exemplary image from Unsplash
             report("unsplash", f"🖼️ Fetching image from Unsplash for {character}...")

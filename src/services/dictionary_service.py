@@ -28,15 +28,26 @@ class DictionaryService:
         Args:
             character: Chinese character to look up
             progress_callback: Optional callback function(stage, message) for progress updates
+            
+        Raises:
+            Exception: If scraping fails (stroke GIFs not found)
         """
         # Use the scraping service exactly like the old app
         scraped_data = scraping_service.scrape_word_details(character, progress_callback)
+        
+        # Check if scraping failed (returns 13 empty strings when failed)
+        if len(scraped_data) == 14 and not scraped_data[0] and not scraped_data[2]:
+            raise Exception(f"Scraping failed for {character} - no data retrieved")
         
         # Unpack the returned tuple (same order as old app)
         # Now includes anki_usage_examples as 14th field
         pinyin, translation, stroke_gifs, pronunciation, example_link, \
         exemplary_image, meaning, reading, component1, component2, \
         styled_term, usage_examples, real_usage_examples, anki_usage_examples = scraped_data
+        
+        # CRITICAL: Stroke GIFs must be present
+        if not stroke_gifs:
+            raise Exception(f"No stroke GIFs retrieved for {character}")
         
         # If styled_term is empty, generate it
         if not styled_term:

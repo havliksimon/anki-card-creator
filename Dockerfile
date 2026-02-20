@@ -27,6 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
+    # Additional deps for Chromium
+    libcurl4 \
+    libxml2 \
+    libxslt1.1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -36,24 +40,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers system-wide (before creating appuser)
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN mkdir -p /opt/playwright-browsers && \
-    python3 -m playwright install chromium --with-deps && \
-    chmod -R 755 /opt/playwright-browsers
+# Install Playwright browsers (system-wide, before creating user)
+RUN python3 -m playwright install chromium --with-deps
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
 
 # Copy application code
 COPY . .
-
-# Create non-root user
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
 
 # Verify installation
-RUN python3 -c "from src.services.scraping_service import scraping_service; print('Scraper module loads OK')"
+RUN python3 -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); b.close(); print('Playwright OK')"
 
 # Expose port
 EXPOSE 8000
