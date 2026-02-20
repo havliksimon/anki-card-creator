@@ -1,209 +1,153 @@
-"""Multi-deck management system for all users."""
-import os
-import httpx
-from typing import List, Dict, Optional
+"""Deck management for multi-deck support."""
+from typing import List, Dict, Optional, Tuple
 from flask import session, current_app
 
 
 class DeckManager:
-    """Manage multiple decks per user (USERID-1, USERID-2 format)."""
+    """Manages user decks with USERID-DECKNUMBER format."""
     
     def __init__(self):
-        self.supabase_url = os.environ.get('SUPABASE_URL')
-        self.supabase_key = os.environ.get('SUPABASE_SERVICE_KEY')
         self._client = None
-        if self.supabase_url and self.supabase_key:
-            self._client = httpx.Client(
-                base_url=f"{self.supabase_url}/rest/v1",
-                headers={
-                    "apikey": self.supabase_key,
-                    "Authorization": f"Bearer {self.supabase_key}",
-                },
-                timeout=30.0
-            )
     
-    def _get_user_decks_table(self):
-        """Ensure user_decks table exists."""
-        # Note: Table should be created via migration
-        pass
+    def _get_db(self):
+        """Lazy load database client."""
+        if self._client is None:
+            from src.models.database import db
+            self._client = db._client
+        return self._client
     
-    def get_user_decks(self, user_id: str) -> List[Dict]:
-        """Get all decks for a user - includes decks with words and user_decks entries."""
-        decks = {}
-        
-        if not self._client:
-            # Fallback: return default deck
-            return [{
-                'deck_id': f'{user_id}-1',
-                'user_id': user_id,
-                'deck_number': 1,
-                'label': 'Main Deck'
-            }]
-        
-        try:
-            # Method 1: Get decks from user_decks table
-            try:
-                response = self._client.get(
-                    f"/user_decks?user_id=eq.{user_id}&order=deck_number.asc"
-                )
-                data = response.json()
-                if isinstance(data, list):
-                    for d in data:
-                        if isinstance(d, dict) and 'deck_id' in d:
-                            deck_num = d.get('deck_number', 1)
-                            decks[deck_num] = d
-            except Exception as e:
-                current_app.logger.warning(f"Could not fetch user_decks: {e}")
-            
-            # Method 2: Get decks that have words (check words table)
-            try:
-                # Get all unique user_ids from words table that start with this user's ID
-                # This catches decks like USERID-1, USERID-3, etc.
-                response = self._client.get(
-                    f"/words?user_id=like.{user_id}-*&select=user_id"
-                )
-                data = response.json()
-                if isinstance(data, list):
-                    for word in data:
-                        word_user_id = word.get('user_id', '')
-                        # Parse deck number from user_id-decknumber format
-                        if word_user_id.startswith(f"{user_id}-"):
-                            try:
-                                deck_num = int(word_user_id.split('-')[-1])
-                                if deck_num not in decks:
-                                    decks[deck_num] = {
-                                        'deck_id': word_user_id,
-                                        'user_id': user_id,
-                                        'deck_number': deck_num,
-                                        'label': f'Deck {deck_num}'
-                                    }
-                            except (ValueError, IndexError):
-                                pass
-            except Exception as e:
-                current_app.logger.warning(f"Could not fetch words decks: {e}")
-            
-            # Ensure deck 1 always exists
-            if 1 not in decks:
-                decks[1] = {
-                    'deck_id': f'{user_id}-1',
-                    'user_id': user_id,
-                    'deck_number': 1,
-                    'label': 'Main Deck'
-                }
-            
-            # Return sorted by deck number
-            return [decks[num] for num in sorted(decks.keys())]
-            
-        except Exception as e:
-            current_app.logger.error(f"Error getting user decks: {e}")
-            # Return default deck on error
-            return [{
-                'deck_id': f'{user_id}-1',
-                'user_id': user_id,
-                'deck_number': 1,
-                'label': 'Main Deck'
-            }]
-    
-    def get_deck_id(self, user_id: str, deck_number: int) -> str:
-        """Get the full deck ID (USERID-DECKNUMBER format)."""
+    def get_deck_id(self, user_id: str, deck_number: int = 1) -> str:
+        """Generate deck ID from user_id and deck number."""
+        if deck_number == 1:
+            # Deck 1 uses the base user_id (legacy format)
+            return user_id
         return f"{user_id}-{deck_number}"
     
-    def parse_deck_id(self, deck_id: str) -> tuple:
-        """Parse deck ID into user_id and deck_number."""
-        parts = deck_id.rsplit('-', 1)
-        if len(parts) == 2:
+    def parse_deck_id(self, deck_id: str) -> Tuple[str, int]:
+        """Parse deck ID into user_id and deck number."""
+        if '-' in deck_id:
+            parts = deck_id.rsplit('-', 1)
             try:
-                return parts[0], int(parts[1])
+                # Check if last part is a number (deck number)
+                deck_num = int(parts[1])
+                return parts[0], deck_num
             except ValueError:
                 pass
-        return deck_id, 1  # Default to deck 1
-    
-    def create_deck(self, user_id: str, deck_number: int, label: str = "") -> Optional[Dict]:
-        """Create a new deck for user."""
-        if not self._client:
-            return None
-        
-        deck_id = self.get_deck_id(user_id, deck_number)
-        
-        try:
-            # Check if deck already exists
-            existing = self._client.get(
-                f"/user_decks?deck_id=eq.{deck_id}&limit=1"
-            ).json()
-            
-            if existing:
-                return existing[0]
-            
-            # Create new deck
-            data = {
-                "deck_id": deck_id,
-                "user_id": user_id,
-                "deck_number": deck_number,
-                "label": label or f"Deck {deck_number}",
-                "created_at": "now()"
-            }
-            
-            response = self._client.post("/user_decks", json=data)
-            if response.status_code == 201:
-                return data
-            return None
-        except Exception as e:
-            current_app.logger.error(f"Error creating deck: {e}")
-            return None
-    
-    def get_or_create_default_deck(self, user_id: str) -> str:
-        """Get or create default deck (deck 1) for user."""
-        deck_id = self.get_deck_id(user_id, 1)
-        
-        # Check if exists
-        decks = self.get_user_decks(user_id)
-        if not decks:
-            self.create_deck(user_id, 1, "Main Deck")
-        
-        return deck_id
+        return deck_id, 1
     
     def get_current_deck_id(self, user_id: str) -> str:
-        """Get the currently selected deck ID from session or default."""
+        """Get current deck ID from session or default to deck 1."""
         session_key = f'deck_id_{user_id}'
         deck_id = session.get(session_key)
-        
-        if not deck_id:
-            deck_id = self.get_or_create_default_deck(user_id)
-            session[session_key] = deck_id
-        
-        return deck_id
+        if deck_id:
+            return deck_id
+        return self.get_deck_id(user_id, 1)
     
-    def set_current_deck(self, user_id: str, deck_number: int) -> str:
-        """Set the current deck for user."""
-        deck_id = self.get_deck_id(user_id, deck_number)
+    def set_current_deck(self, user_id: str, deck_number: int):
+        """Set current deck for user in session."""
         session_key = f'deck_id_{user_id}'
-        session[session_key] = deck_id
-        return deck_id
-    
-    def swap_to_deck(self, user_id: str, deck_number: int, label: str = "") -> str:
-        """Swap to a deck, creating it if needed."""
         deck_id = self.get_deck_id(user_id, deck_number)
-        
-        # Ensure deck exists in database
-        self.create_deck(user_id, deck_number, label)
-        
-        # Set as current
-        return self.set_current_deck(user_id, deck_number)
+        session[session_key] = deck_id
+        current_app.logger.info(f"Set deck for user {user_id}: {deck_id} (deck {deck_number})")
     
-    def update_deck_label(self, deck_id: str, label: str) -> bool:
-        """Update the label of a deck."""
-        if not self._client:
-            return False
+    def get_user_decks(self, user_id: str) -> List[Dict]:
+        """Get all decks for a user - works with BOTH legacy numeric IDs and new format."""
+        from src.models.database import db
+        decks = []
         
+        # Method 1: Check user_decks table (if it exists)
         try:
-            response = self._client.patch(
-                f"/user_decks?deck_id=eq.{deck_id}",
-                json={"label": label}
+            response = self._get_db().get(
+                f"/user_decks?user_id=eq.{user_id}&order=deck_number.asc"
             )
-            return response.status_code == 204
+            data = response.json()
+            if isinstance(data, list):
+                for d in data:
+                    if isinstance(d, dict) and 'deck_id' in d:
+                        decks.append(d)
         except Exception as e:
-            current_app.logger.error(f"Error updating deck label: {e}")
-            return False
+            current_app.logger.debug(f"user_decks table query failed (expected if table doesn't exist): {e}")
+        
+        # Method 2: Check words table for all user IDs belonging to this user
+        # This handles BOTH:
+        # - Legacy format: user_id (for deck 1)
+        # - Legacy format: "2", "3", "4", "5", "11" etc. (numeric user IDs for other decks)
+        # - New format: user_id-1, user_id-3, etc.
+        try:
+            all_words = db.get_words_by_user(user_id)
+            
+            # Find all unique user_ids in words that belong to this user
+            deck_numbers_found = set()
+            
+            for word in all_words:
+                word_user_id = word.get('user_id', '')
+                
+                # Check if it's the base user_id (Deck 1)
+                if word_user_id == user_id:
+                    deck_numbers_found.add(1)
+                # Check if it's the new format (user_id-NUMBER)
+                elif str(word_user_id).startswith(f"{user_id}-"):
+                    try:
+                        deck_num = int(str(word_user_id).split('-')[-1])
+                        deck_numbers_found.add(deck_num)
+                    except ValueError:
+                        pass
+            
+            # Also check for numeric user_ids (legacy format where user_id was "2", "3", etc.)
+            # These belong to the admin user based on our data analysis
+            all_words_all_users = db._client.get("/words?select=*").json()
+            if isinstance(all_words_all_users, list):
+                for word in all_words_all_users:
+                    word_uid = str(word.get('user_id', ''))
+                    # If it's a pure numeric ID (not a UUID), it might be a legacy deck
+                    if word_uid.isdigit():
+                        deck_num = int(word_uid)
+                        deck_numbers_found.add(deck_num)
+            
+            # Create deck entries for all found deck numbers
+            existing_numbers = {d['deck_number'] for d in decks}
+            for deck_num in deck_numbers_found:
+                if deck_num not in existing_numbers:
+                    if deck_num == 1:
+                        deck_id = user_id  # Legacy format for deck 1
+                    else:
+                        deck_id = str(deck_num)  # Legacy format: just the number
+                    
+                    decks.append({
+                        'deck_id': deck_id,
+                        'user_id': user_id,
+                        'deck_number': deck_num,
+                        'label': f'Deck {deck_num}'
+                    })
+            
+            decks.sort(key=lambda x: x['deck_number'])
+        except Exception as e:
+            current_app.logger.error(f"Error scanning words for decks: {e}")
+        
+        if decks:
+            return decks
+        
+        # Fallback to default deck
+        return [{
+            'deck_id': user_id,
+            'user_id': user_id,
+            'deck_number': 1,
+            'label': 'Main Deck'
+        }]
+    
+    def create_deck(self, user_id: str, deck_number: int, label: str = None) -> bool:
+        """Create a new deck for user."""
+        # For now, just ensure we can track it
+        # We don't need to create anything in the database since:
+        # - Deck 1 uses the base user_id
+        # - Other decks use numeric IDs (legacy) or user_id-N format (new)
+        return True
+    
+    def swap_to_deck(self, user_id: str, deck_number: int) -> str:
+        """Swap to a deck, creating it if needed."""
+        self.create_deck(user_id, deck_number, f"Deck {deck_number}")
+        self.set_current_deck(user_id, deck_number)
+        return self.get_deck_id(user_id, deck_number)
 
 
 # Global instance

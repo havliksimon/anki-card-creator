@@ -252,8 +252,34 @@ class Database:
             user_id: The user ID
             deck_id: Optional deck ID (e.g., USERID-1, USERID-2). If None, uses user_id
         """
-        # Use deck_id if provided, otherwise fall back to user_id
-        target_id = deck_id if deck_id else user_id
+        # Determine the target_id for the query
+        # Handle legacy format where deck_id might be:
+        # - user_id (Deck 1, legacy format)
+        # - user_id-N (Deck N, new format) -> need to extract N or use N directly
+        # - N (Deck N, pure numeric legacy format)
+        if deck_id:
+            # Check if deck_id is in format USERID-NUMBER
+            if '-' in deck_id:
+                parts = deck_id.rsplit('-', 1)
+                try:
+                    # If last part is a number, this is a deck identifier
+                    deck_num = int(parts[1])
+                    if deck_num == 1:
+                        # Deck 1 uses base user_id
+                        target_id = user_id
+                    else:
+                        # For other decks, try the numeric ID first (legacy format)
+                        target_id = str(deck_num)
+                except ValueError:
+                    # Not a number, use as-is
+                    target_id = deck_id
+            elif deck_id.isdigit():
+                # Pure numeric deck ID (legacy format)
+                target_id = deck_id
+            else:
+                target_id = deck_id
+        else:
+            target_id = user_id
         
         if self._client:
             response = self._client.get(f"/words?user_id=eq.{target_id}&order=created_at.desc")
