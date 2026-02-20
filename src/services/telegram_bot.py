@@ -1200,6 +1200,9 @@ class TelegramBotService:
                 
                 logger.info(f"Copying word '{word_text}' to deck {current_deck} with user_id={target_user_id[:20]}...")
                 
+                # Log what we're copying from
+                logger.info(f"Source word keys: {list(source_word.keys())}")
+                
                 word_details = {
                     'character': source_word['character'],
                     'pinyin': source_word.get('pinyin', ''),
@@ -1217,6 +1220,8 @@ class TelegramBotService:
                     'example_link': source_word.get('example_link', ''),
                     'user_id': target_user_id  # Use proper deck user_id format
                 }
+                import json
+                logger.info(f"Word details being sent: {json.dumps(word_details, default=str)[:500]}")
                 result = db.create_word(word_details)
                 logger.info(f"Created word '{word_text}' in deck {current_deck}, result={result}")
                 copied.append(word_text)

@@ -302,14 +302,23 @@ class Database:
     
     def create_word(self, word_data: Dict) -> Optional[int]:
         """Create a new word."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if self._client:
+            logger.info(f"create_word: creating word '{word_data.get('character')}' for user_id={word_data.get('user_id', '')[:20]}...")
             response = self._client.post("/words", json=word_data)
+            logger.info(f"create_word: response status={response.status_code}")
             if response.status_code == 201:
                 # Get the created word ID
                 result = self._client.get(f"/words?character=eq.{word_data['character']}&user_id=eq.{word_data['user_id']}&limit=1")
                 data = result.json()
-                return data[0]['id'] if data else None
-            return None
+                word_id = data[0]['id'] if data else None
+                logger.info(f"create_word: success, word_id={word_id}")
+                return word_id
+            else:
+                logger.error(f"create_word FAILED: status={response.status_code}, response={response.text[:500]}")
+                return None
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
