@@ -1,4 +1,4 @@
-"""Web scraping service using Selenium - EXACT copy from old app."""
+"""Efficient web scraping service using requests + minimal Playwright."""
 import os
 import re
 import urllib.parse
@@ -7,30 +7,27 @@ import traceback
 import time
 from typing import List, Dict, Tuple, Optional
 from bs4 import BeautifulSoup
-from urllib.parse import quote
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 import requests
+from urllib.parse import quote
 
-# Tone colors mapping (same as old app)
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
+
 tone_colors = {
-    1: '#ff0000',  # Red
-    2: '#ffaa00',  # Orange
-    3: '#00aa00',  # Green
-    4: '#0000ff',  # Blue
-    0: 'var(--regular-text)'   # Black (neutral)
+    1: '#ff0000',
+    2: '#ffaa00',
+    3: '#00aa00',
+    4: '#0000ff',
+    0: 'var(--regular-text)'
 }
 
 
 def get_tone_number(syllable):
-    """Get tone number from pinyin syllable."""
     tone_mapping = {
         'ā': 1, 'ō': 1, 'ē': 1, 'ī': 1, 'ū': 1, 'ǖ': 1,
         'á': 2, 'ó': 2, 'é': 2, 'í': 2, 'ú': 2, 'ǘ': 2,
@@ -40,16 +37,14 @@ def get_tone_number(syllable):
     for char in syllable:
         if char in tone_mapping:
             return tone_mapping[char]
-    return 0  # Neutral tone/unknown
+    return 0
 
 
 def chinese_to_styled_texts(chinese_str):
-    """Convert Chinese to styled pinyin and hanzi - EXACT from old app."""
     pinyin_list = []
     char_list = []
     
     for char in chinese_str:
-        # Get pinyin for character
         try:
             import pypinyin
             py = pypinyin.pinyin(char, style=pypinyin.Style.TONE)[0][0]
@@ -68,10 +63,9 @@ def chinese_to_styled_texts(chinese_str):
     return ' '.join(pinyin_list), ''.join(char_list)
 
 
-def style_scraped_pinyin(pinyin_str, word_str):
-    """Style scraped pinyin with colors - EXACT copy from old app."""
+def style_scraped_pinyin(pinyin_list, word_str):
     styled_syllables = []
-    syllables = pinyin_str if isinstance(pinyin_str, list) else [pinyin_str]
+    syllables = pinyin_list if isinstance(pinyin_list, list) else [pinyin_list]
     word_syllables = [char for char in word_str]
     styled_word_syllables = []
     
@@ -88,15 +82,12 @@ def style_scraped_pinyin(pinyin_str, word_str):
 
 
 def extract_plain_hanzi(hanzi_html):
-    """Extract plain text from hanzi HTML."""
     soup = BeautifulSoup(hanzi_html, 'html.parser')
     return soup.get_text()
 
 
 def convert_pinyin_to_styled(pinyin_html):
-    """Convert pinyin HTML to styled HTML with colors."""
     soup = BeautifulSoup(pinyin_html, 'html.parser')
-    # Process syllable spans to add color styles
     for span in soup.find_all('span', class_=re.compile(r'tone-\d')):
         classes = span.get('class', [])
         tone_class = next((c for c in classes if c.startswith('tone-')), None)
@@ -104,33 +95,26 @@ def convert_pinyin_to_styled(pinyin_html):
             tone = int(tone_class.split('-')[1])
             color = tone_colors.get(tone, '')
             span['style'] = f'color: {color};'
-            # Remove all classes
             del span['class']
     
-    # Remove all elements with class 'pinyin sentence' or 'pinyin word'
     for elem in soup.find_all(class_=lambda x: x in ['pinyin sentence', 'pinyin word']):
-        elem.unwrap()  # Unwraps the element, keeping its contents
+        elem.unwrap()
     
-    # Remove 'non-pinyin' spans and replace them with their text content
     for elem in soup.find_all(class_='non-pinyin'):
         elem.replace_with(elem.get_text())
     
-    # Remove 'lang' attributes and unnecessary classes
     for elem in soup.find_all():
         if 'lang' in elem.attrs:
             del elem['lang']
         if 'class' in elem.attrs and not elem['class']:
             del elem['class']
     
-    # Generate the plain text string with spans and text
     pinyin_str = ''.join([str(elem) for elem in soup.body.children]) if soup.body else str(soup)
     return pinyin_str.strip()
 
 
 def convert_hanzi_to_styled(hanzi_html):
-    """Convert hanzi HTML to styled HTML with colors."""
     soup = BeautifulSoup(hanzi_html, 'html.parser')
-    # Process tone spans
     for span in soup.find_all('span', class_=re.compile(r'tone-\d')):
         classes = span.get('class', [])
         tone_class = next((c for c in classes if c.startswith('tone-')), None)
@@ -138,21 +122,18 @@ def convert_hanzi_to_styled(hanzi_html):
             tone = int(tone_class.split('-')[1])
             color = tone_colors.get(tone, '')
             span['style'] = f'color: {color};'
-            del span['class']  # Remove class attribute
+            del span['class']
     
-    # Cleanup attributes
     for elem in soup.find_all():
         if 'lang' in elem.attrs:
             del elem['lang']
         if 'class' in elem.attrs and not elem['class']:
             del elem['class']
     
-    # Return processed HTML
     return str(soup).strip()
 
 
 def cache_audio(audio_url):
-    """Trigger API call to cache audio."""
     try:
         requests.get(audio_url, timeout=5)
     except Exception as e:
@@ -160,115 +141,79 @@ def cache_audio(audio_url):
 
 
 class ScrapingService:
-    """Web scraping service using Selenium - EXACT copy from old app."""
-    
     def __init__(self):
-        self.driver = None
-        self.wait = None
-        # Don't initialize driver here - lazy load on first use
-        # This saves ~100MB RAM when app starts
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        self.playwright = None
+        self.browser = None
     
-    def _init_driver(self):
-        """Initialize Selenium WebDriver."""
-        try:
-            # Firefox options for headless mode - optimized for low RAM
-            firefox_options = Options()
-            firefox_options.add_argument("--no-sandbox")
-            firefox_options.add_argument("--headless")
-            firefox_options.headless = True
-            
-            # Memory optimization flags
-            firefox_options.add_argument("--disable-dev-shm-usage")
-            firefox_options.add_argument("--disable-gpu")
-            firefox_options.add_argument("--disable-extensions")
-            firefox_options.add_argument("--disable-images")  # Don't load images
-            firefox_options.add_argument("--disable-javascript")  # Disable JS where possible
-            
-            # Essential preferences for headless mode
-            firefox_options.set_preference("dom.webdriver.enabled", False)
-            firefox_options.set_preference("useAutomationExtension", False)
-            firefox_options.set_preference("marionette.enabled", True)
-            firefox_options.set_preference("toolkit.telemetry.reportingpolicy.firstRun", False)
-            
-            # Memory optimizations
-            firefox_options.set_preference("browser.tabs.firefox-view", False)
-            firefox_options.set_preference("datareporting.healthreport.service.enabled", False)
-            firefox_options.set_preference("datareporting.policy.dataSubmissionEnabled", False)
-            firefox_options.set_preference("browser.sessionstore.resume_from_crash", False)
-            firefox_options.set_preference("browser.cache.disk.enable", False)
-            firefox_options.set_preference("browser.cache.memory.enable", False)
-            firefox_options.set_preference("browser.cache.offline.enable", False)
-            firefox_options.set_preference("network.http.use-cache", False)
-            
-            # Initialize driver
-            self.driver = webdriver.Firefox(options=firefox_options)
-            self.driver.set_window_size(1280, 720)  # Smaller window to save memory
-            self.wait = WebDriverWait(self.driver, 15)
-            print("Selenium WebDriver initialized (lazy load)")
-        except Exception as e:
-            print(f"Failed to initialize WebDriver: {e}")
-            self.driver = None
-            self.wait = None
+    def _get_playwright(self):
+        if not PLAYWRIGHT_AVAILABLE:
+            return None
+        if self.playwright is None:
+            self.playwright = sync_playwright().start()
+            self.browser = self.playwright.chromium.launch(headless=True)
+        return self.playwright
     
-    def _ensure_driver(self):
-        """Ensure driver is initialized (lazy loading)."""
-        if self.driver is None:
-            self._init_driver()
-        return self.driver is not None
-    
+    def close(self):
+        if self.browser:
+            try:
+                self.browser.close()
+            except:
+                pass
+            self.browser = None
+        if self.playwright:
+            try:
+                self.playwright.stop()
+            except:
+                pass
+            self.playwright = None
+
     def scrape_chinese_sentences(self, word: str) -> List[Dict]:
-        """Scrape example sentences from ChineseBoost - EXACT from old app."""
-        if not self._ensure_driver():
-            return []
+        url = f"https://www.chineseboost.com/chinese-example-sentences?query={urllib.parse.quote(word)}"
         
-        encoded_word = urllib.parse.quote(word)
-        url = f"https://www.chineseboost.com/chinese-example-sentences?query={encoded_word}"
-        self.driver.get(url)
-        
-        data = []
-        
-        # Scrape current page
-        self._process_page(data)
-        
-        # Navigate to next pages
-        counter = 0
-        while self._navigate_to_next_page() and counter < 2:
-            counter += 1
-            self._process_page(data)
-        
-        return data
-    
-    def _process_page(self, data: List[Dict]):
-        """Process a page of ChineseBoost results - EXACT from old app."""
         try:
-            cards = self.driver.find_elements(By.CSS_SELECTOR, 'div.card')
+            resp = self.session.get(url, timeout=15)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            cards = soup.find_all('div', class_='card')
             
+            data = []
             for card in cards:
                 try:
-                    liju = card.find_element(By.CSS_SELECTOR, 'div.liju')
+                    liju = card.find('div', class_='liju')
+                    if not liju:
+                        continue
                     
-                    # Hanzi processing
-                    hanzi_element = liju.find_element(By.CSS_SELECTOR, 'p.hanzi')
-                    hanzi_html = hanzi_element.get_attribute('innerHTML').strip()
+                    hanzi_element = liju.find('p', class_='hanzi')
+                    pinyin_element = liju.find('p', class_='pinyin')
+                    translation_element = liju.find('p', class_='yingwen')
+                    
+                    if not (hanzi_element and pinyin_element and translation_element):
+                        continue
+                    
+                    hanzi_html = hanzi_element.decode_contents() if hanzi_element else ''
                     chinese_sentence = extract_plain_hanzi(hanzi_html)
                     styled_hanzi = convert_hanzi_to_styled(hanzi_html)
                     
-                    # Pinyin processing
-                    pinyin_element = liju.find_element(By.CSS_SELECTOR, 'p.pinyin')
-                    pinyin_html = pinyin_element.get_attribute('innerHTML').strip()
+                    pinyin_html = pinyin_element.decode_contents() if pinyin_element else ''
                     styled_pinyin = convert_pinyin_to_styled(pinyin_html)
                     
-                    # Translation processing
-                    translation_element = liju.find_element(By.CSS_SELECTOR, 'p.yingwen')
-                    translation = translation_element.text.strip()
+                    translation = translation_element.get_text().strip()
                     
-                    # Source processing
-                    source_span = liju.find_element(By.CSS_SELECTOR, 'small.text-muted')
-                    anchors = source_span.find_elements(By.TAG_NAME, 'a')
-                    source = {
-                        'name': anchors[0].text.strip() if anchors else '',
-                        'url': anchors[0].get_attribute('href').strip() if anchors else ''
-                    }
+                    source = {'name': '', 'url': ''}
+                    try:
+                        source_span = liju.find('small', class_='text-muted')
+                        if source_span:
+                            a = source_span.find('a')
+                            if a:
+                                source = {
+                                    'name': a.get_text().strip(),
+                                    'url': a.get('href', '').strip()
+                                }
+                    except:
+                        pass
                     
                     data.append({
                         'chinese_sentence': chinese_sentence,
@@ -280,219 +225,168 @@ class ScrapingService:
                     })
                 except Exception as e:
                     print(f"Error processing card: {e}")
+            
+            return data
         except Exception as e:
-            print(f"Error processing page: {e}")
-    
-    def _navigate_to_next_page(self) -> bool:
-        """Navigate to next page of results - EXACT from old app."""
-        try:
-            pagination = self.driver.find_element(By.CSS_SELECTOR, 'ul.pagination')
-            next_buttons = pagination.find_elements(By.CSS_SELECTOR, 'li.page-item a[rel="next"]')
-            if next_buttons:
-                next_button = next_buttons[0]
-                parent_li = next_button.find_element(By.XPATH, '..')
-                if 'disabled' not in parent_li.get_attribute('class'):
-                    next_button.click()
-                    return True
-        except Exception as e:
-            print(f"Pagination error: {e}")
-        return False
-    
-    def scrape_mdbg(self, character: str) -> List[Dict]:
-        """Scrape word details from MDBG dictionary - EXACT from old app."""
-        if not self._ensure_driver():
+            print(f"Error scraping ChineseBoost: {e}")
             return []
-        
-        app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
-        tts_api_url = f"{app_url}/api/tts"
-        
-        self.driver.get(f"https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={character}")
-        results = []
+
+    def scrape_mdbg(self, character: str) -> List[Dict]:
+        url = f"https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={urllib.parse.quote(character)}"
         
         try:
-            self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "tr.row"))
-            )
-            entries = self.driver.find_elements(By.CSS_SELECTOR, "tr.row")
-            print(f"MDBG entries found: {len(entries)}")
+            resp = self.session.get(url, timeout=15)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            entries = soup.find_all('tr', class_='row')
+            
+            results = []
+            app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
+            tts_api_url = f"{app_url}/api/tts"
             
             for entry in entries:
                 try:
-                    # Extract basic components
-                    term = entry.find_element(By.CSS_SELECTOR, "td.head .hanzi").text.strip()
-                    raw_pinyin = [span.text.strip() for span in entry.find_elements(By.CSS_SELECTOR, "td.head .pinyin span")]
-                    definition = entry.find_element(By.CSS_SELECTOR, "td.details .defs").text.replace("\n", ", ").strip()
+                    head = entry.find('td', class_='head')
+                    if not head:
+                        continue
                     
-                    # Style pinyin and term
+                    hanzi_div = head.find('div', class_='hanzi')
+                    term = hanzi_div.get_text() if hanzi_div else ''
+                    
+                    pinyin_div = head.find('div', class_='pinyin')
+                    pinyin_spans = pinyin_div.find_all('span') if pinyin_div else []
+                    raw_pinyin = [s.get_text() for s in pinyin_spans]
+                    
+                    details = entry.find('td', class_='details')
+                    defs_div = details.find('div', class_='defs') if details else None
+                    definition = defs_div.get_text().replace('\n', ', ').strip() if defs_div else ''
+                    
                     pinyin, styled_term = style_scraped_pinyin(raw_pinyin, term)
                     
-                    # Audio extraction - use new API
                     audio_url = f"{tts_api_url}?hanzi={quote(term)}"
                     threading.Thread(target=cache_audio, args=(audio_url,)).start()
                     
-                    # Traditional character
-                    traditional = ""
-                    try:
-                        traditional = entry.find_element(By.CSS_SELECTOR, "td.tail .hanzi").text.strip()
-                    except:
-                        pass
+                    traditional = ''
+                    tail = entry.find('td', class_='tail')
+                    if tail:
+                        trad_div = tail.find('div', class_='hanzi')
+                        if trad_div:
+                            traditional = trad_div.get_text().strip()
                     
                     results.append({
                         'term': term,
                         'styled_term': styled_term,
                         'pinyin': pinyin,
                         'definition': definition,
-                        'example_link': "",
+                        'example_link': '',
                         'audio_url': audio_url,
-                        'stroke_order': "",  # Will be filled from writtenchinese
+                        'stroke_order': '',
                         'traditional': traditional
                     })
                 except Exception as e:
-                    print(f"Error processing MDBG entry: {str(e)}")
+                    print(f"Error processing MDBG entry: {e}")
                     continue
+            
+            return results
         except Exception as e:
-            print(f"MDBG scraping failed: {str(e)}")
-        
-        return results
-    
+            print(f"MDBG scraping failed: {e}")
+            return []
+
     def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
-        """
-        Scrape stroke order and meaning from WrittenChinese - EXACT from old app.
-        Returns: (meaning, stroke_order_urls)
-        """
-        if not self._ensure_driver():
+        if not PLAYWRIGHT_AVAILABLE:
+            print("Playwright not available, skipping WrittenChinese")
             return "", []
         
-        meanings_list = []
-        stroke_order_urls = []
-        random_fix = False
-        
         try:
-            self.driver.get("https://dictionary.writtenchinese.com")
-            input_element = self.wait.until(EC.presence_of_element_located((By.ID, 'searchKey')))
-            input_element.send_keys(character)
-            input_element.send_keys(Keys.ENTER)
+            p = self._get_playwright()
+            if not p or not self.browser:
+                return "", []
             
-            learn_more_link = self.wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//a[@class='cstm learnmore learn-more-link']/span[text()='Learn more']")
-            ))
-            learn_more_link.click()
+            page = self.browser.new_page()
+            page.set_default_timeout(30000)
             
-            self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.symbol-layer img")))
+            meanings_list = []
+            stroke_order_urls = []
             
-            # Get meanings for multi-character words
-            if len(str(character)) > 1:
-                try:
-                    character_table = self.driver.find_element(By.CSS_SELECTOR, "table.with-flex")
-                    rows = character_table.find_elements(By.TAG_NAME, "tr")[1:]
-                    
-                    for row in rows:
-                        try:
-                            char_cell = row.find_element(By.CSS_SELECTOR, "td.smbl-cstm-wrp.word")
-                            char = char_cell.find_element(By.TAG_NAME, "span").text
-                            
-                            pinyin_cell = row.find_element(By.CSS_SELECTOR, "td.pinyin")
-                            pinyin = pinyin_cell.find_element(By.TAG_NAME, "a").text
-                            
-                            meaning_cell = row.find_element(By.CSS_SELECTOR, "td.txt-cell")
-                            meaning = meaning_cell.text
-                            
-                            print(f"Character: {char} ({pinyin}) - Meaning: {meaning}")
-                            styled_pinyin, styled_char = chinese_to_styled_texts(char)
-                            entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
-                            if entry not in meanings_list and not random_fix:
-                                meanings_list.append(entry)
-                        except:
-                            continue
-                except Exception as e:
-                    print(f"Error getting meanings table: {e}")
+            try:
+                page.goto('https://dictionary.writtenchinese.com')
+                page.wait_for_load_state('domcontentloaded')
+                
+                page.fill('#searchKey', character)
+                page.press('#searchKey', 'Enter')
+                page.wait_for_timeout(5000)
+                
+                links = page.query_selector_all('a.learn-more-link')
+                worddetail_href = None
+                for link in links:
+                    href = link.get_attribute('href')
+                    if href and 'worddetail' in href:
+                        worddetail_href = href
+                        break
+                
+                if not worddetail_href:
+                    page.close()
+                    return "", []
+                
+                page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}')
+                page.wait_for_timeout(5000)
+                
+                symbol = page.query_selector('div.symbol-layer')
+                if symbol:
+                    imgs = symbol.query_selector_all('img')
+                    stroke_order_urls = [
+                        img.get_attribute('src') for img in imgs
+                        if img.get_attribute('src') and 'giffile' in img.get_attribute('src')
+                    ]
+                
+                if len(str(character)) > 1:
+                    try:
+                        table = page.query_selector('table.with-flex')
+                        if table:
+                            rows = table.query_selector_all('tr')[1:]
+                            for row in rows:
+                                try:
+                                    char_cell = row.query_selector('td.smbl-cstm-wrp.word span')
+                                    pinyin_cell = row.query_selector('td.pinyin a')
+                                    meaning_cell = row.query_selector('td.txt-cell')
+                                    
+                                    if char_cell and pinyin_cell and meaning_cell:
+                                        char = char_cell.inner_text()
+                                        pinyin_text = pinyin_cell.inner_text()
+                                        meaning = meaning_cell.inner_text()
+                                        
+                                        styled_pinyin, styled_char = chinese_to_styled_texts(char)
+                                        entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
+                                        if entry not in meanings_list:
+                                            meanings_list.append(entry)
+                                except:
+                                    continue
+                    except Exception as e:
+                        print(f"Error getting meanings table: {e}")
+                
+            finally:
+                page.close()
             
-            # Get stroke order GIFs
-            gif_elements = self.driver.find_elements(By.CSS_SELECTOR, "div.symbol-layer img")
-            stroke_order_urls = [
-                gif_src.get_attribute("src") for gif_src in gif_elements
-                if gif_src.get_attribute("src") and "giffile.action" in gif_src.get_attribute("src")
-            ]
-            print(f"Stroke order URLs: {stroke_order_urls}")
+            meaning = " ".join(meanings_list) if meanings_list else ""
+            return meaning, stroke_order_urls
             
         except Exception as e:
-            print(f"WrittenChinese scraping failed (trying fallback): {e}")
-            
-            # Fallback: scrape each character individually
-            for single_character in character:
-                try:
-                    self.driver.get("https://dictionary.writtenchinese.com")
-                    input_element = self.wait.until(EC.presence_of_element_located((By.ID, 'searchKey')))
-                    input_element.send_keys(single_character)
-                    input_element.send_keys(Keys.ENTER)
-                    
-                    learn_more_link = self.wait.until(EC.element_to_be_clickable(
-                        (By.XPATH, "//a[@class='cstm learnmore learn-more-link']/span[text()='Learn more']")
-                    ))
-                    learn_more_link.click()
-                    
-                    self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.symbol-layer img")))
-                    gif_elements = self.driver.find_elements(By.CSS_SELECTOR, "div.symbol-layer img")
-                    urls = [
-                        gif.get_attribute("src") for gif in gif_elements
-                        if gif.get_attribute("src") and "giffile.action" in gif.get_attribute("src")
-                    ]
-                    if urls:
-                        stroke_order_urls.append(urls[0])  # Take first GIF for each char
-                    
-                    # Get meaning for single character
-                    if len(str(character)) > 1:
-                        try:
-                            definition_element = self.wait.until(
-                                EC.presence_of_element_located((By.XPATH, "(//td[@class='txt-cell'])[1]"))
-                            )
-                            meaning = definition_element.text
-                            pinyin, styled_char = chinese_to_styled_texts(single_character)
-                            entry = f"🔂 {styled_char} ({pinyin}): {meaning}"
-                            if entry not in meanings_list and not random_fix:
-                                meanings_list.append(entry)
-                        except:
-                            pass
-                except Exception as e2:
-                    print(f"Fallback scraping failed for {single_character}: {e2}")
-        
-        # Build meaning string
-        meaning = " ".join(meanings_list) if meanings_list else ""
-        
-        return meaning, stroke_order_urls
-    
+            print(f"WrittenChinese scraping failed: {e}")
+            return "", []
+
     def scrape_word_details(self, character: str, progress_callback=None) -> Tuple:
-        """
-        Scrape complete word details - EXACT copy from old app.
-        
-        Args:
-            character: Chinese character to scrape
-            progress_callback: Optional callback function(stage_name, message) for progress updates
-            
-        Returns: (pinyin, definition, stroke_gifs, pronunciation, example_link, 
-                  exemplary_image, meaning, reading, component1, component2, 
-                  styled_term, usage_examples, real_usage_examples)
-        """
         def report(stage, message):
             if progress_callback:
                 progress_callback(stage, message)
         
-        if not self._ensure_driver():
-            report("error", "WebDriver not available")
-            return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
-        
-        app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
-        tts_api_url = f"{app_url}/api/tts"
-        unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
-        
         try:
-            # Get example sentences from ChineseBoost
             report("chineseboost", f"🔍 Scraping ChineseBoost for {character}...")
             reading_results = self.scrape_chinese_sentences(character)
             
-            # Build component2 and reading from ChineseBoost results
             component2 = ""
             reading = ""
+            app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
+            tts_api_url = f"{app_url}/api/tts"
+            
             if reading_results:
                 try:
                     component2_parts = []
@@ -513,20 +407,19 @@ class ScrapingService:
                 except Exception as e:
                     print(f"Error building reading: {e}")
             
-            # Get main word data from MDBG
             report("mdbg", f"📖 Scraping MDBG for {character}...")
             results = self.scrape_mdbg(character)
             
             if not results:
                 return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
             
-            # Get stroke order and meaning from WrittenChinese
             report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
             meaning, stroke_urls = self.scrape_writtenchinese(character)
             if stroke_urls:
-                results[0]['stroke_order'] = ", ".join(stroke_urls)
+                # Make URLs absolute
+                abs_urls = [f'https://dictionary.writtenchinese.com{url}' for url in stroke_urls]
+                results[0]['stroke_order'] = ", ".join(abs_urls)
             
-            # Prioritize exact match
             try:
                 if results[0]["term"] != character:
                     result_candidates = []
@@ -549,9 +442,9 @@ class ScrapingService:
             except Exception as e:
                 print(f"Error reordering results: {e}")
             
-            # Get exemplary_image from Unsplash
             report("unsplash", f"🖼️ Fetching image from Unsplash for {character}...")
             exemplary_image = ""
+            unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
             if unsplash_api_key:
                 try:
                     url = 'https://api.unsplash.com/search/photos'
@@ -572,10 +465,8 @@ class ScrapingService:
             
             results[0]['exemplary_image'] = exemplary_image
             
-            # component1 placeholder (same as old app)
             component1 = 'Developer Note: "Reading" card type is still work in progress (will be fixed by standard importing of cards in the near future)'
             
-            # Build real_usage_examples from reading_results
             real_usage_examples = []
             for idx, result in enumerate(reading_results[:6], 1):
                 audio_url = f"{tts_api_url}?hanzi={quote(result['chinese_sentence'])}"
@@ -596,37 +487,26 @@ class ScrapingService:
             
             report("done", f"✅ {character} complete!")
             
-            # Return format matches old app exactly
             return (
-                results[0]["pinyin"],           # 0: pinyin
-                results[0]['definition'],        # 1: definition (translation)
-                results[0]["stroke_order"],      # 2: stroke_order (stroke_gifs)
-                results[0]["audio_url"],         # 3: audio_url (pronunciation)
-                results[0]['example_link'],      # 4: example_link
-                results[0]['exemplary_image'],   # 5: exemplary_image
-                meaning,                         # 6: meaning
-                reading,                         # 7: reading
-                component1,                      # 8: component1
-                component2,                      # 9: component2
-                results[0]["styled_term"],       # 10: styled_term
-                str(reading_results),            # 11: usage_examples
-                real_usage_examples_str          # 12: real_usage_examples
+                results[0]["pinyin"],
+                results[0]['definition'],
+                results[0]["stroke_order"],
+                results[0]["audio_url"],
+                results[0]['example_link'],
+                results[0]['exemplary_image'],
+                meaning,
+                reading,
+                component1,
+                component2,
+                results[0]["styled_term"],
+                str(reading_results),
+                real_usage_examples_str
             )
             
         except Exception as e:
             print(f"Error in scrape_word_details: {e}")
             traceback.print_exc()
             return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
-    
-    def close(self):
-        """Close the WebDriver."""
-        if self.driver:
-            try:
-                self.driver.quit()
-            except:
-                pass
-            self.driver = None
 
 
-# Global instance
 scraping_service = ScrapingService()

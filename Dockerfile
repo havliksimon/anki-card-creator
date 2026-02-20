@@ -1,43 +1,33 @@
-# Dockerfile for Anki Card Creator with Firefox/Scraping support
+# Dockerfile for Anki Card Creator - Optimized for 512MB RAM
 FROM python:3.11-slim-bookworm
 
-# Install Firefox ESR and all dependencies
+# Install Playwright and system dependencies (much lighter than Firefox)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    firefox-esr \
     wget \
     curl \
     ca-certificates \
-    # X11 and display support
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrender1 \
-    libxt6 \
-    libxtst6 \
-    # GTK and graphics
-    libgtk-3-0 \
-    libgdk-pixbuf2.0-0 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libatk1.0-0 \
-    libcairo-gobject2 \
-    libglib2.0-0 \
-    # Font support
+    # Font support for Chinese
     fonts-noto-cjk \
     fonts-noto-color-emoji \
-    # Utilities
-    bzip2 \
+    # Playwright browser dependencies
+    libglib2.0-0 \
+    libnss3 \
+    libnspr4 \
+    libdbus-1-3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
     && rm -rf /var/lib/apt/lists/*
-
-# Set display port to avoid crash
-ENV DISPLAY=:99
-ENV MOZ_HEADLESS=1
 
 # Set working directory
 WORKDIR /app
@@ -46,11 +36,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy geckodriver and extension from bin/ folder
-COPY bin/geckodriver /usr/local/bin/geckodriver
-RUN chmod +x /usr/local/bin/geckodriver
-
-COPY bin/extension.xpi /app/extension.xpi
+# Install Playwright browsers (lightweight Chromium only)
+RUN python3 -m playwright install chromium --with-deps
 
 # Copy application code
 COPY . .
