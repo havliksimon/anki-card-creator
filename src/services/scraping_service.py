@@ -165,16 +165,24 @@ class ScrapingService:
     def __init__(self):
         self.driver = None
         self.wait = None
-        self._init_driver()
+        # Don't initialize driver here - lazy load on first use
+        # This saves ~100MB RAM when app starts
     
     def _init_driver(self):
         """Initialize Selenium WebDriver."""
         try:
-            # Firefox options for headless mode
+            # Firefox options for headless mode - optimized for low RAM
             firefox_options = Options()
             firefox_options.add_argument("--no-sandbox")
             firefox_options.add_argument("--headless")
             firefox_options.headless = True
+            
+            # Memory optimization flags
+            firefox_options.add_argument("--disable-dev-shm-usage")
+            firefox_options.add_argument("--disable-gpu")
+            firefox_options.add_argument("--disable-extensions")
+            firefox_options.add_argument("--disable-images")  # Don't load images
+            firefox_options.add_argument("--disable-javascript")  # Disable JS where possible
             
             # Essential preferences for headless mode
             firefox_options.set_preference("dom.webdriver.enabled", False)
@@ -182,18 +190,28 @@ class ScrapingService:
             firefox_options.set_preference("marionette.enabled", True)
             firefox_options.set_preference("toolkit.telemetry.reportingpolicy.firstRun", False)
             
+            # Memory optimizations
+            firefox_options.set_preference("browser.tabs.firefox-view", False)
+            firefox_options.set_preference("datareporting.healthreport.service.enabled", False)
+            firefox_options.set_preference("datareporting.policy.dataSubmissionEnabled", False)
+            firefox_options.set_preference("browser.sessionstore.resume_from_crash", False)
+            firefox_options.set_preference("browser.cache.disk.enable", False)
+            firefox_options.set_preference("browser.cache.memory.enable", False)
+            firefox_options.set_preference("browser.cache.offline.enable", False)
+            firefox_options.set_preference("network.http.use-cache", False)
+            
             # Initialize driver
             self.driver = webdriver.Firefox(options=firefox_options)
-            self.driver.set_window_size(1920, 1080)
+            self.driver.set_window_size(1280, 720)  # Smaller window to save memory
             self.wait = WebDriverWait(self.driver, 15)
-            print("Selenium WebDriver initialized")
+            print("Selenium WebDriver initialized (lazy load)")
         except Exception as e:
             print(f"Failed to initialize WebDriver: {e}")
             self.driver = None
             self.wait = None
     
     def _ensure_driver(self):
-        """Ensure driver is initialized."""
+        """Ensure driver is initialized (lazy loading)."""
         if self.driver is None:
             self._init_driver()
         return self.driver is not None
