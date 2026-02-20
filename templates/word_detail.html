@@ -204,8 +204,8 @@
                 <button class="play-button" onclick="playAudio()">🔊 Play Audio</button>
             </div>
             <div class="anki-card-back">
-                {% if word.anki_usage_examples %}
-                    <div>{{ word.anki_usage_examples|safe }}</div>
+                {% if word.anki_usage_examples or word.real_usage_examples %}
+                    <div>{{ (word.anki_usage_examples or word.real_usage_examples)|safe }}</div>
                 {% else %}
                     <div style="text-align: center; color: #999; padding: 20px;">
                         No example sentences available
@@ -243,10 +243,10 @@
                     </div>
                 {% endif %}
                 
-                {% if word.anki_usage_examples %}
+                {% if word.anki_usage_examples or word.real_usage_examples %}
                     <div style="margin-top: 20px;">
                         <h4 style="margin-bottom: 10px;">Example Sentences:</h4>
-                        {{ word.anki_usage_examples|safe }}
+                        {{ (word.anki_usage_examples or word.real_usage_examples)|safe }}
                     </div>
                 {% endif %}
                 
