@@ -47,7 +47,9 @@ def index():
 @login_required
 @admin_required
 def deck_switcher():
-    """Deck switcher for admin - view any user's deck."""
+    """Deck switcher for admin - view current deck and switch between decks."""
+    from src.models.deck_manager import deck_manager
+    
     # Get all users sorted by ID (low numbers first, then UUIDs)
     all_users = db.get_users()
     
@@ -63,25 +65,42 @@ def deck_switcher():
     
     all_users.sort(key=sort_key)
     
-    # Get current viewed user from session or default to self
-    viewed_user_id = session.get('viewed_user_id', current_user.id)
-    viewed_user = None
+    # Get current deck info (using the same system as dashboard/dictionary)
+    deck_id = deck_manager.get_current_deck_id(current_user.id)
+    deck_num = deck_manager.parse_deck_id(deck_id)[1]
     
-    if viewed_user_id != current_user.id:
-        user_data = db.get_user_by_id(viewed_user_id)
-        if user_data:
-            viewed_user = User(user_data)
-    
-    if not viewed_user:
+    # Check if we're viewing another user
+    viewed_user_id = session.get('viewed_user_id')
+    if viewed_user_id and viewed_user_id != current_user.id:
+        # Viewing another user - get their deck 1
+        target_user = db.get_user_by_id(viewed_user_id)
+        if target_user:
+            viewed_user = User(target_user)
+            # For other users, show their deck 1 (legacy format)
+            words = db.get_words_by_user(viewed_user_id)
+            user_decks = []  # Can't switch decks for other users
+            current_deck_num = 1
+        else:
+            # User not found, reset to self
+            viewed_user = current_user
+            words = db.get_words_by_user(current_user.id, deck_id)
+            user_decks = deck_manager.get_user_decks(current_user.id)
+            current_deck_num = deck_num
+            session.pop('viewed_user_id', None)
+    else:
+        # Viewing own deck
         viewed_user = current_user
-        viewed_user_id = current_user.id
-    
-    # Get words for viewed user
-    words = db.get_words_by_user(viewed_user_id)
+        words = db.get_words_by_user(current_user.id, deck_id)
+        user_decks = deck_manager.get_user_decks(current_user.id)
+        current_deck_num = deck_num
     
     return render_template('admin/deck_switcher.html',
                          users=all_users,
                          viewed_user=viewed_user,
+                         current_user=current_user,
+                         current_deck_id=deck_id,
+                         current_deck_num=current_deck_num,
+                         user_decks=user_decks,
                          words=words)
 
 
@@ -90,10 +109,20 @@ def deck_switcher():
 @admin_required
 def switch_to_user(user_id):
     """Switch to viewing a specific user's deck."""
-    session['viewed_user_id'] = user_id
+    from src.models.deck_manager import deck_manager
+    
     user_data = db.get_user_by_id(user_id)
-    if user_data:
-        flash(f"Now viewing deck for: {user_data.get('email') or user_data.get('telegram_id') or user_id}", 'info')
+    if not user_data:
+        flash(f"User {user_id} not found", 'error')
+        return redirect(url_for('admin.deck_switcher'))
+    
+    # Set viewed user
+    session['viewed_user_id'] = user_id
+    
+    # When viewing another user, set their Deck 1 as current
+    deck_manager.set_current_deck(current_user.id, 1)
+    
+    flash(f"Now viewing deck for: {user_data.get('email') or user_data.get('telegram_id') or user_id}", 'info')
     return redirect(url_for('admin.deck_switcher'))
 
 
@@ -101,9 +130,13 @@ def switch_to_user(user_id):
 @login_required
 @admin_required
 def reset_to_my_deck():
-    """Reset to viewing admin's own deck."""
+    """Reset to viewing admin's own deck (Deck 1)."""
+    from src.models.deck_manager import deck_manager
+    
+    # Reset to deck 1
+    deck_manager.set_current_deck(current_user.id, 1)
     session.pop('viewed_user_id', None)
-    flash("Back to your own deck", 'info')
+    flash("Back to your own deck (Deck 1)", 'info')
     return redirect(url_for('admin.deck_switcher'))
 
 
@@ -112,6 +145,8 @@ def reset_to_my_deck():
 @admin_required
 def swap_to_deck():
     """Swap to a deck by number - creates if doesn't exist."""
+    from src.models.deck_manager import deck_manager
+    
     deck_number = request.form.get('deck_number', '').strip()
     
     if not deck_number:
@@ -121,34 +156,26 @@ def swap_to_deck():
     # Validate it's a positive integer
     try:
         deck_num = int(deck_number)
-        if deck_num < 0:
+        if deck_num < 1:
             raise ValueError()
     except ValueError:
-        flash('Deck number must be a positive integer', 'error')
+        flash('Deck number must be a positive integer (1, 2, 3...)', 'error')
         return redirect(url_for('admin.deck_switcher'))
     
-    deck_id = str(deck_num)
+    # Use the new multi-deck system: user_id-deck_number format
+    deck_id = deck_manager.get_deck_id(current_user.id, deck_num)
     
-    # Check if user exists
-    existing_user = db.get_user_by_id(deck_id)
+    # Create the deck in the database
+    deck_manager.create_deck(current_user.id, deck_num, f"Deck {deck_num}")
     
-    if not existing_user:
-        # Create a new placeholder user for this deck
-        db.create_user(
-            user_id=deck_id,
-            email=None,
-            password_hash=None,
-            telegram_id=deck_id,
-            telegram_username=f"deck_{deck_id}",
-            is_active=True,
-            is_admin=False
-        )
-        flash(f"Created and switched to new deck: {deck_id}", 'success')
-    else:
-        flash(f"Switched to deck: {deck_id}", 'info')
+    # Set as current deck for the main app (this affects dashboard, dictionary, etc.)
+    deck_manager.set_current_deck(current_user.id, deck_num)
     
-    session['viewed_user_id'] = deck_id
-    return redirect(url_for('admin.deck_switcher'))
+    # Also set viewed_user_id to current user so admin panel shows this deck
+    session['viewed_user_id'] = current_user.id
+    
+    flash(f"Switched to Deck {deck_num}", 'success')
+    return redirect(url_for('main.dashboard'))
 
 
 @admin_bp.route('/pending')

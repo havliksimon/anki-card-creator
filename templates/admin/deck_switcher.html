@@ -3,29 +3,47 @@
 {% block title %}Deck Switcher - Admin{% endblock %}
 
 {% block content %}
-<div style="max-width: 1200px; margin: 0 auto;">
+<!-- Deck Selector Bar -->
+<div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 1rem 0; margin-bottom: 2rem;">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <h2 style="margin: 0; font-size: 1.25rem;">🎴 Admin Deck View</h2>
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">(Deck {{ current_deck_num }})</span>
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            {% if viewed_user.id == current_user.id %}
+                <span style="color: var(--text-secondary); font-size: 0.875rem;">Your Decks:</span>
+                {% for d in user_decks %}
+                    {% set d_num = d.deck_number %}
+                    <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" style="display: inline;">
+                        <input type="hidden" name="deck_number" value="{{ d_num }}">
+                        <button type="submit" class="btn btn-sm {% if current_deck_num == d_num %}btn-primary{% else %}btn-secondary{% endif %}">{{ d_num }}</button>
+                    </form>
+                {% endfor %}
+                
+                <!-- Quick Swap Form -->
+                <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" style="display: inline; margin-left: 1rem;">
+                    <input type="number" name="deck_number" placeholder="#" min="1" required style="width: 50px; padding: 0.25rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px;">
+                    <button type="submit" class="btn btn-sm btn-success">Go</button>
+                </form>
+            {% else %}
+                <span style="color: var(--warning);">Viewing: {{ viewed_user.email or viewed_user.telegram_id or viewed_user.id[:8] }}</span>
+                <a href="{{ url_for('admin.reset_to_my_deck') }}" class="btn btn-sm btn-secondary">Back to My Decks</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="container">
     <h1 style="margin-bottom: 1.5rem;">🎴 Admin Deck Switcher</h1>
     
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem;">
         <div>
-            <!-- Quick Swap Form -->
-            <div class="card" style="margin-bottom: 1.5rem;">
-                <div class="card-header">
-                    <h3 class="card-title">Quick Swap to Deck #</h3>
-                </div>
-                <div style="padding: 1rem;">
-                    <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" style="display: flex; gap: 0.5rem;">
-                        <input type="number" name="deck_number" class="form-input" placeholder="Enter number" min="0" required style="flex: 1;">
-                        <button type="submit" class="btn btn-primary">Swap</button>
-                    </form>
-                    <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">Creates new deck if doesn't exist</small>
-                </div>
-            </div>
-            
-            <!-- User Decks List -->
+            <!-- User List -->
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">All User Decks</h3>
+                    <h3 class="card-title">All Users</h3>
                 </div>
                 <div style="max-height: 500px; overflow-y: auto;">
                     <a href="{{ url_for('admin.reset_to_my_deck') }}" 
@@ -36,9 +54,9 @@
                     {% for user in users %}
                         {% if user.id != current_user.id %}
                         <a href="{{ url_for('admin.switch_to_user', user_id=user.id) }}" 
-                           style="display: block; padding: 1rem; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; {% if viewed_user.id == user.id %}background: var(--primary); color: white;{% endif %}">
-                            <strong>ID: {{ user.id }}</strong>
-                            <small style="display: block; {% if viewed_user.id == user.id %}color: rgba(255,255,255,0.8);{% else %}color: var(--text-secondary);{% endif %}">
+                           style="display: block; padding: 1rem; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit;">
+                            <strong>ID: {{ user.id[:8] }}...</strong>
+                            <small style="display: block; color: var(--text-secondary);">
                                 {{ user.email or user.telegram_id or 'No identifier' }}
                                 {% if user.is_admin %}
                                     <span style="background: var(--danger); color: white; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.75rem;">Admin</span>
@@ -49,6 +67,15 @@
                     {% endfor %}
                 </div>
             </div>
+            
+            <div class="card" style="margin-top: 1rem;">
+                <div style="padding: 1rem;">
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0;">
+                        💡 <strong>Tip:</strong> Use the deck buttons above to switch between your own decks. 
+                        Click on a user to view their deck.
+                    </p>
+                </div>
+            </div>
         </div>
         
         <div>
@@ -56,9 +83,7 @@
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h3 class="card-title">
                         Vocabulary Deck
-                        {% if viewed_user.id != current_user.id %}
-                            <span style="color: var(--text-secondary); font-weight: normal;">(Viewing: {{ viewed_user.id }})</span>
-                        {% endif %}
+                        <span style="color: var(--text-secondary); font-weight: normal;">(Deck {{ current_deck_num }})</span>
                     </h3>
                     <span class="badge badge-primary">{{ words|length }} words</span>
                 </div>
@@ -93,6 +118,11 @@
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No words in this deck.</p>
                     {% endif %}
                 </div>
+            </div>
+            
+            <div style="margin-top: 1.5rem; text-align: center;">
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+                <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary">View Dictionary</a>
             </div>
         </div>
     </div>
