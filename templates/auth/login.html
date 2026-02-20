@@ -38,10 +38,23 @@
                 data-telegram-login="{{ telegram_bot_username }}" 
                 data-size="large" 
                 data-auth-url="{{ url_for('auth.login_telegram', _external=True) }}"
-                data-request-access="write">
+                data-request-access="write"
+                data-userpic="false">
             </script>
             <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">
                 Sign in with Telegram
+            </p>
+            {% if request.args.get('telegram_error') %}
+            <p style="color: var(--danger); font-size: 0.875rem; margin-top: 0.5rem;">
+                ⚠️ {{ request.args.get('telegram_error') }}
+            </p>
+            {% endif %}
+        </div>
+        {% else %}
+        <!-- Telegram not configured -->
+        <div style="text-align: center; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">
+                Telegram login not configured
             </p>
         </div>
         {% endif %}

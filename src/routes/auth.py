@@ -83,10 +83,21 @@ def login_email():
     return redirect(url_for('main.dashboard'))
 
 
-@auth_bp.route('/login/telegram', methods=['POST'])
+@auth_bp.route('/login/telegram', methods=['POST', 'GET'])
 def login_telegram():
     """Telegram login handler."""
+    # Handle GET requests (error callbacks from Telegram widget)
+    if request.method == 'GET':
+        error = request.args.get('error', 'Unknown error')
+        current_app.logger.error(f"Telegram login error: {error}")
+        flash(f'Telegram login failed: {error}. Please check domain configuration.', 'error')
+        return redirect(url_for('auth.login', telegram_error=error))
+    
+    # POST request from Telegram widget
     data = request.form.to_dict()
+    
+    # Log the login attempt (for debugging)
+    current_app.logger.info(f"Telegram login attempt: id={data.get('id')}, username={data.get('username')}")
     
     # Check auth date (must be within 24 hours)
     auth_date = int(data.get('auth_date', 0))
@@ -96,6 +107,7 @@ def login_telegram():
     
     # Verify Telegram data
     if not check_telegram_auth(data):
+        current_app.logger.error("Telegram auth verification failed")
         flash('Authentication failed. Please try again.', 'error')
         return redirect(url_for('auth.login'))
     

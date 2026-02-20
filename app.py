@@ -13,6 +13,7 @@ from src.routes.auth import auth_bp
 from src.routes.main import main_bp
 from src.routes.admin import admin_bp
 from src.routes.api import api_bp
+from src.routes.debug import debug_bp
 from flask import request  # Import for rate limiter
 
 
@@ -52,6 +53,7 @@ def create_app(config_name=None):
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(debug_bp)
     
     # Error handlers
     @app.errorhandler(404)

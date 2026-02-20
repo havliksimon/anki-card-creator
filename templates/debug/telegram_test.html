@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Telegram Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            color: #856404;
+        }
+        .error {
+            background: #f8d7da;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            color: #721c24;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .widget-container {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Telegram Login Widget Test</h1>
+        
+        <div class="info">
+            <strong>Configuration Check:</strong>
+            <ul>
+                <li>Bot Username: <code>{{ telegram_bot_username or 'Not set' }}</code></li>
+                <li>Current URL: <code>{{ request.url }}</code></li>
+                <li>Request Host: <code>{{ request.host }}</code></li>
+            </ul>
+        </div>
+
+        {% if telegram_bot_username and telegram_bot_username != 'your_bot_username' %}
+            <div class="info">
+                <strong>BotFather Configuration Required:</strong>
+                <ol>
+                    <li>Message <a href="https://t.me/BotFather" target="_blank">@BotFather</a></li>
+                    <li>Send <code>/setdomain</code></li>
+                    <li>Select your bot: <code>@{{ telegram_bot_username }}</code></li>
+                    <li>Enter EXACTLY: <code>{{ request.host }}</code> (without https://)</li>
+                </ol>
+            </div>
+
+            <div class="widget-container">
+                <h3>Test Widget Below:</h3>
+                <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                    data-telegram-login="{{ telegram_bot_username }}" 
+                    data-size="large" 
+                    data-auth-url="{{ url_for('auth.login_telegram', _external=True) }}"
+                    data-request-access="write"
+                    data-userpic="false">
+                </script>
+                <p style="color: #666; margin-top: 10px;">If you see "Bot domain invalid", the domain is not configured correctly in BotFather.</p>
+            </div>
+        {% else %}
+            <div class="error">
+                <strong>Telegram Bot Not Configured!</strong>
+                <p>Set TELEGRAM_BOT_USERNAME and TELEGRAM_BOT_TOKEN environment variables.</p>
+            </div>
+        {% endif %}
+
+        <div class="warning">
+            <strong>Troubleshooting Tips:</strong>
+            <ul>
+                <li>Domain must match EXACTLY what you set in BotFather</li>
+                <li>Do NOT include <code>https://</code> when setting domain in BotFather</li>
+                <li>No trailing slash</li>
+                <li>No <code>www.</code> prefix unless you're using it</li>
+                <li>Changes can take 1-5 minutes to take effect</li>
+            </ul>
+        </div>
+
+        <p><a href="{{ url_for('main.index') }}">← Back to Home</a></p>
+    </div>
+</body>
+</html>
