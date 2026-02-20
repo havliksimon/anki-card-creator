@@ -1134,9 +1134,12 @@ class TelegramBotService:
         current_deck = self._get_current_deck_id(context)
         base_user_id = user_data['id']
         
+        logger.info(f"handle_text: user={base_user_id[:8]}..., current_deck={current_deck}, words={chinese_words}")
+        
         # Check for existing words in the CURRENT deck specifically
         # Pass base_user_id and current_deck to filter correctly
         words = db.get_words_by_user(base_user_id, current_deck)
+        logger.info(f"handle_text: found {len(words)} existing words in deck {current_deck}")
         existing_chars = {w['character'] for w in words}
         
         new_words = [w for w in chinese_words if w not in existing_chars]
@@ -1154,6 +1157,7 @@ class TelegramBotService:
         global_words = {}
         # First check all decks of current user (get all words for this user)
         all_user_words = db.get_words_by_user(base_user_id)
+        logger.info(f"handle_text: found {len(all_user_words)} words across all user decks")
         for w in all_user_words:
             if w['character'] in new_words and w['character'] not in global_words:
                 global_words[w['character']] = w
@@ -1170,6 +1174,8 @@ class TelegramBotService:
         # Words to scrape (not found anywhere)
         words_to_scrape = [w for w in new_words if w not in global_words]
         words_to_copy = [w for w in new_words if w in global_words]
+        
+        logger.info(f"handle_text: new_words={new_words}, words_to_copy={words_to_copy}, words_to_scrape={words_to_scrape}")
         
         # Process words
         status_message = await update.message.reply_text(
@@ -1191,6 +1197,9 @@ class TelegramBotService:
                     target_user_id = f"{base_user_id}-{current_deck}"
                 else:
                     target_user_id = base_user_id
+                
+                logger.info(f"Copying word '{word_text}' to deck {current_deck} with user_id={target_user_id[:20]}...")
+                
                 word_details = {
                     'character': source_word['character'],
                     'pinyin': source_word.get('pinyin', ''),
@@ -1208,12 +1217,13 @@ class TelegramBotService:
                     'example_link': source_word.get('example_link', ''),
                     'user_id': target_user_id  # Use proper deck user_id format
                 }
-                db.create_word(word_details)
+                result = db.create_word(word_details)
+                logger.info(f"Created word '{word_text}' in deck {current_deck}, result={result}")
                 copied.append(word_text)
             except Exception as e:
-                logger.error(f"Error copying word {word_text}: {e}")
-                # Will try to scrape instead
-                words_to_scrape.append(word_text)
+                logger.error(f"Error copying word {word_text}: {e}", exc_info=True)
+                # Don't try to scrape - just mark as failed
+                failed.append(word_text)
         
         # Then scrape words that don't exist anywhere
         for i, word_text in enumerate(words_to_scrape):
@@ -1280,6 +1290,8 @@ class TelegramBotService:
         
         result_text += f"\nUse /dictionary to see your words\n"
         result_text += "Use /export to download for Anki"
+        
+        logger.info(f"handle_text complete: added={added}, copied={copied}, failed={failed}, deck={current_deck}")
         
         await status_message.edit_text(result_text)
     
