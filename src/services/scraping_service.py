@@ -8,6 +8,7 @@ import json
 import time
 import asyncio
 import concurrent.futures
+import gc  # Garbage collection for memory optimization
 from typing import List, Dict, Tuple, Optional
 from bs4 import BeautifulSoup
 
@@ -21,7 +22,8 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
 # Thread pool for running Playwright in async contexts
-_playwright_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+# Single worker for 512MB RAM - can't run multiple browsers simultaneously
+_playwright_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 
 tone_colors = {
@@ -279,43 +281,47 @@ class ScrapingService:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
-        self.playwright = None
-        self.browser = None
+        # Note: Playwright browser is now created/destroyed per scrape to save memory
     
     def _get_playwright(self):
+        """Get a fresh playwright instance (for memory efficiency - don't persist)"""
         if not PLAYWRIGHT_AVAILABLE:
             print("Playwright not available (not installed)")
-            return None
-        if self.playwright is None:
-            try:
-                self.playwright = sync_playwright().start()
-                # Try to launch with explicit executable path if env var is set
-                import os
-                browsers_path = os.environ.get('PLAYWRIGHT_BROWSERS_PATH')
-                if browsers_path:
-                    print(f"Using Playwright browsers from: {browsers_path}")
-                self.browser = self.playwright.chromium.launch(headless=True)
-                print("Chromium browser launched successfully")
-            except Exception as e:
-                print(f"ERROR launching Playwright browser: {e}")
-                self.playwright = None
-                self.browser = None
-                return None
-        return self.playwright
+            return None, None
+        try:
+            playwright = sync_playwright().start()
+            # Memory-optimized launch args for 512MB RAM
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--single-process',  # Critical for low memory
+                    '--no-zygote',  # No child processes
+                    '--disable-extensions',
+                    '--disable-background-networking',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-breakpad',
+                    '--disable-component-extensions-with-background-pages',
+                    '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                    '--disable-ipc-flooding-protection',
+                    '--disable-renderer-backgrounding',
+                    '--force-color-profile=srgb',
+                    '--max_old_space_size=128',  # Limit JS heap
+                    '--js-flags=--max-old-space-size=128'
+                ]
+            )
+            return playwright, browser
+        except Exception as e:
+            print(f"ERROR launching Playwright browser: {e}")
+            return None, None
     
     def close(self):
-        if self.browser:
-            try:
-                self.browser.close()
-            except:
-                pass
-            self.browser = None
-        if self.playwright:
-            try:
-                self.playwright.stop()
-            except:
-                pass
-            self.playwright = None
+        """Legacy method - browser is now closed after each scrape"""
+        pass
 
     def scrape_mdbg(self, character: str) -> List[Dict]:
         url = f"https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={urllib.parse.quote(character)}"
@@ -383,108 +389,122 @@ class ScrapingService:
             print("Playwright not available, skipping WrittenChinese")
             return "", []
         
+        playwright = None
+        browser = None
+        page = None
+        meanings_list = []
+        stroke_order_urls = []
+        
         try:
-            p = self._get_playwright()
-            if not p or not self.browser:
+            playwright, browser = self._get_playwright()
+            if not playwright or not browser:
                 print("Browser not initialized")
                 return "", []
             
-            page = self.browser.new_page()
-            # Increased timeout for Koyeb's limited resources (60 seconds)
-            page.set_default_timeout(60000)
+            page = browser.new_page()
+            # Reduced timeout since we're on limited resources
+            page.set_default_timeout(45000)
             
-            meanings_list = []
-            stroke_order_urls = []
+            # Go to Written Chinese dictionary
+            page.goto('https://dictionary.writtenchinese.com', wait_until='domcontentloaded')
             
+            # Search for the character
+            page.fill('#searchKey', character)
+            page.press('#searchKey', 'Enter')
+            page.wait_for_timeout(1500)
+            
+            # Look for "Learn more" link
+            links = page.query_selector_all('a.learn-more-link')
+            worddetail_href = None
+            for link in links:
+                href = link.get_attribute('href')
+                if href and 'worddetail' in href:
+                    worddetail_href = href
+                    break
+            
+            if not worddetail_href:
+                print(f"No worddetail link found for {character}")
+                return "", []
+            
+            # Navigate to word detail page
+            page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded')
+            page.wait_for_timeout(1500)
+            
+            # Extract stroke order GIFs from symbol-layer
             try:
-                # Go to Written Chinese dictionary
-                page.goto('https://dictionary.writtenchinese.com', wait_until='domcontentloaded')
-                
-                # Search for the character
-                page.fill('#searchKey', character)
-                page.press('#searchKey', 'Enter')
-                page.wait_for_timeout(2000)  # Reduced wait time
-                
-                # Look for "Learn more" link
-                links = page.query_selector_all('a.learn-more-link')
-                worddetail_href = None
-                for link in links:
-                    href = link.get_attribute('href')
-                    if href and 'worddetail' in href:
-                        worddetail_href = href
-                        break
-                
-                if not worddetail_href:
-                    print(f"No worddetail link found for {character}")
-                    page.close()
-                    return "", []
-                
-                # Navigate to word detail page
-                page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded')
-                page.wait_for_timeout(2000)  # Reduced wait time
-                
-                # Extract stroke order GIFs from symbol-layer
-                try:
-                    gif_elements = page.query_selector_all('div.symbol-layer img')
-                    for gif in gif_elements:
-                        src = gif.get_attribute('src')
-                        if src and 'giffile.action' in src:
-                            # Ensure full URL
-                            if src.startswith('http'):
-                                stroke_order_urls.append(src)
-                            else:
-                                stroke_order_urls.append(f'https://dictionary.writtenchinese.com{src}')
-                except Exception as e:
-                    print(f"Error extracting stroke GIFs: {e}")
-                
-                # For multi-character words, extract individual character meanings
-                if len(str(character)) > 1:
-                    try:
-                        character_table = page.query_selector('table.with-flex')
-                        if character_table:
-                            rows = character_table.query_selector_all('tr')[1:]  # Skip header
-                            for row in rows:
-                                try:
-                                    char_cell = row.query_selector('td.smbl-cstm-wrp.word span')
-                                    pinyin_cell = row.query_selector('td.pinyin a')
-                                    meaning_cell = row.query_selector('td.txt-cell')
-                                    
-                                    if char_cell and pinyin_cell and meaning_cell:
-                                        char = char_cell.inner_text()
-                                        pinyin_text = pinyin_cell.inner_text()
-                                        meaning = meaning_cell.inner_text()
-                                        
-                                        styled_pinyin, styled_char = chinese_to_styled_texts(char)
-                                        entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
-                                        if entry not in meanings_list:
-                                            meanings_list.append(entry)
-                                except:
-                                    continue
-                    except Exception as e:
-                        print(f"Error getting meanings table: {e}")
-                else:
-                    # For single character, get the definition
-                    try:
-                        definition_element = page.query_selector('td.txt-cell')
-                        if definition_element:
-                            meaning = definition_element.inner_text()
-                            styled_pinyin, styled_char = chinese_to_styled_texts(character)
-                            entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
-                            if entry not in meanings_list:
-                                meanings_list.append(entry)
-                    except:
-                        pass
-                
-            finally:
-                page.close()
+                gif_elements = page.query_selector_all('div.symbol-layer img')
+                for gif in gif_elements:
+                    src = gif.get_attribute('src')
+                    if src and 'giffile.action' in src:
+                        if src.startswith('http'):
+                            stroke_order_urls.append(src)
+                        else:
+                            stroke_order_urls.append(f'https://dictionary.writtenchinese.com{src}')
+            except Exception as e:
+                print(f"Error extracting stroke GIFs: {e}")
             
-            meaning = " ".join(meanings_list) if meanings_list else ""
-            return meaning, stroke_order_urls
+            # For multi-character words, extract individual character meanings
+            if len(str(character)) > 1:
+                try:
+                    character_table = page.query_selector('table.with-flex')
+                    if character_table:
+                        rows = character_table.query_selector_all('tr')[1:]  # Skip header
+                        for row in rows:
+                            try:
+                                char_cell = row.query_selector('td.smbl-cstm-wrp.word span')
+                                pinyin_cell = row.query_selector('td.pinyin a')
+                                meaning_cell = row.query_selector('td.txt-cell')
+                                
+                                if char_cell and pinyin_cell and meaning_cell:
+                                    char = char_cell.inner_text()
+                                    pinyin_text = pinyin_cell.inner_text()
+                                    meaning = meaning_cell.inner_text()
+                                    
+                                    styled_pinyin, styled_char = chinese_to_styled_texts(char)
+                                    entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
+                                    if entry not in meanings_list:
+                                        meanings_list.append(entry)
+                            except:
+                                continue
+                except Exception as e:
+                    print(f"Error getting meanings table: {e}")
+            else:
+                # For single character, get the definition
+                try:
+                    definition_element = page.query_selector('td.txt-cell')
+                    if definition_element:
+                        meaning = definition_element.inner_text()
+                        styled_pinyin, styled_char = chinese_to_styled_texts(character)
+                        entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
+                        if entry not in meanings_list:
+                            meanings_list.append(entry)
+                except:
+                    pass
             
         except Exception as e:
             print(f"WrittenChinese scraping failed: {e}")
-            traceback.print_exc()
-            return "", []
+        finally:
+            # CRITICAL: Close everything to free memory for 512MB environment
+            if page:
+                try:
+                    page.close()
+                except:
+                    pass
+            if browser:
+                try:
+                    browser.close()
+                except:
+                    pass
+            if playwright:
+                try:
+                    playwright.stop()
+                except:
+                    pass
+            # Force garbage collection to free memory immediately
+            gc.collect()
+        
+        meaning = " ".join(meanings_list) if meanings_list else ""
+        return meaning, stroke_order_urls
 
     def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
         """
@@ -497,8 +517,8 @@ class ScrapingService:
             asyncio.get_running_loop()
             # We're in an async context - run in thread pool
             future = _playwright_executor.submit(self._scrape_writtenchinese_sync, character)
-            # Increased timeout for Koyeb (90 seconds total)
-            return future.result(timeout=90)
+            # Timeout for 512MB RAM environment (60 seconds)
+            return future.result(timeout=60)
         except RuntimeError:
             # No running loop - run directly
             return self._scrape_writtenchinese_sync(character)
