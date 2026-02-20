@@ -67,7 +67,7 @@ class TelegramBot:
     
     def _get_or_create_user(self, telegram_id: str, username: str = None) -> Tuple[Dict, bool]:
         """Get existing user or create new one."""
-        user = db.get_user_by_telegram(telegram_id)
+        user = db.get_user_by_telegram_id(telegram_id)
         if user:
             return user, False
         
@@ -84,13 +84,13 @@ class TelegramBot:
         db.create_user(user_data)
         
         # Add to pending approvals
-        db.add_pending_approval(user_id)
+        db.create_pending_approval(user_id)
         
         return user_data, True
     
     def _get_user_by_telegram(self, telegram_id: str) -> Optional[Dict]:
         """Get user by telegram ID."""
-        return db.get_user_by_telegram(telegram_id)
+        return db.get_user_by_telegram_id(telegram_id)
     
     # ==================== DECK MANAGEMENT (ADMIN ONLY) ====================
     
@@ -753,7 +753,7 @@ class TelegramBot:
         
         text = "⏳ *Pending Approvals*\n\n"
         for p in pending:
-            user = db.get_user(p.get('user_id'))
+            user = db.get_user_by_id(p.get('user_id'))
             if user:
                 telegram_id = user.get('telegram_id', 'N/A')
                 username = user.get('telegram_username', 'N/A')
