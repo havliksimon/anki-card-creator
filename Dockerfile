@@ -1,7 +1,7 @@
 # Dockerfile for Anki Card Creator - Optimized for 512MB RAM
 FROM python:3.11-slim-bookworm
 
-# Install Playwright and system dependencies (much lighter than Firefox)
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
@@ -36,14 +36,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (lightweight Chromium only)
-RUN python3 -m playwright install chromium --with-deps
+# Install Playwright browsers system-wide (before creating appuser)
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN mkdir -p /opt/playwright-browsers && \
+    python3 -m playwright install chromium --with-deps && \
+    chmod -R 755 /opt/playwright-browsers
 
 # Copy application code
 COPY . .
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
 USER appuser
 
 # Verify installation

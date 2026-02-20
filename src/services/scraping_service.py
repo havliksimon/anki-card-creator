@@ -284,10 +284,23 @@ class ScrapingService:
     
     def _get_playwright(self):
         if not PLAYWRIGHT_AVAILABLE:
+            print("Playwright not available (not installed)")
             return None
         if self.playwright is None:
-            self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.launch(headless=True)
+            try:
+                self.playwright = sync_playwright().start()
+                # Try to launch with explicit executable path if env var is set
+                import os
+                browsers_path = os.environ.get('PLAYWRIGHT_BROWSERS_PATH')
+                if browsers_path:
+                    print(f"Using Playwright browsers from: {browsers_path}")
+                self.browser = self.playwright.chromium.launch(headless=True)
+                print("Chromium browser launched successfully")
+            except Exception as e:
+                print(f"ERROR launching Playwright browser: {e}")
+                self.playwright = None
+                self.browser = None
+                return None
         return self.playwright
     
     def close(self):
@@ -536,8 +549,10 @@ class ScrapingService:
             # Scrape Written Chinese for stroke GIFs and meaning
             report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
             meaning, stroke_urls = self.scrape_writtenchinese(character)
-            if stroke_urls:
-                results[0]['stroke_order'] = ", ".join(stroke_urls)
+            if not stroke_urls:
+                # CRITICAL: Stroke GIFs are required - fail if not found
+                raise Exception(f"CRITICAL: No stroke GIFs found for {character}. Scraping failed.")
+            results[0]['stroke_order'] = ", ".join(stroke_urls)
             
             # Get exemplary image from Unsplash
             report("unsplash", f"🖼️ Fetching image from Unsplash for {character}...")
