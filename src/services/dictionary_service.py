@@ -57,6 +57,9 @@ class DictionaryService:
         if not pinyin:
             pinyin, _ = chinese_to_styled_pinyin(character)
         
+        # Return only fields that exist in the database schema
+        # Schema: character, user_id, pinyin, translation, meaning, stroke_gifs, 
+        #         pronunciation, exemplary_image, anki_usage_examples, real_usage_examples, styled_term
         return {
             'character': character,
             'pinyin': pinyin,
@@ -67,12 +70,7 @@ class DictionaryService:
             'pronunciation': pronunciation or self._get_pronunciation_url(character),
             'exemplary_image': exemplary_image,
             'anki_usage_examples': anki_usage_examples,  # Other MDBG entries (field 9)
-            'real_usage_examples': real_usage_examples,  # AI examples from DeepSeek
-            'usage_examples': usage_examples,
-            'reading': reading,
-            'component1': component1,
-            'component2': component2,
-            'example_link': example_link
+            'real_usage_examples': real_usage_examples  # AI examples from DeepSeek
         }
     
     def _get_pronunciation_url(self, text: str) -> str:

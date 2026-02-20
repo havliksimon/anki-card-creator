@@ -1200,9 +1200,9 @@ class TelegramBotService:
                 
                 logger.info(f"Copying word '{word_text}' to deck {current_deck} with user_id={target_user_id[:20]}...")
                 
-                # Log what we're copying from
-                logger.info(f"Source word keys: {list(source_word.keys())}")
-                
+                # Only include fields that exist in the database schema
+                # Schema: character, user_id, pinyin, translation, meaning, stroke_gifs, 
+                #         pronunciation, exemplary_image, anki_usage_examples, real_usage_examples, styled_term
                 word_details = {
                     'character': source_word['character'],
                     'pinyin': source_word.get('pinyin', ''),
@@ -1214,10 +1214,6 @@ class TelegramBotService:
                     'exemplary_image': source_word.get('exemplary_image', ''),
                     'anki_usage_examples': source_word.get('anki_usage_examples', ''),
                     'real_usage_examples': source_word.get('real_usage_examples', ''),
-                    'reading': source_word.get('reading', ''),
-                    'component1': source_word.get('component1', ''),
-                    'component2': source_word.get('component2', ''),
-                    'example_link': source_word.get('example_link', ''),
                     'user_id': target_user_id  # Use proper deck user_id format
                 }
                 import json
