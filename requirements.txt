@@ -46,8 +46,8 @@ cryptography==42.0.0
 python-slugify==8.0.3
 cachetools==5.3.2
 
-# Telegram Bot (using compatible version with supabase httpx requirements)
-python-telegram-bot==20.6
+# Telegram Bot
+python-telegram-bot==21.0.1
 
 # Development (not needed for production)
 pytest==7.4.4
