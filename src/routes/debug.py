@@ -45,3 +45,14 @@ def telegram_config():
 def telegram_test():
     """Test page for Telegram login widget."""
     return render_template('debug/telegram_test.html')
+
+
+@debug_bp.route('/telegram-diagnostic')
+def telegram_diagnostic():
+    """Detailed diagnostic page for Telegram login issues."""
+    from flask import current_app
+    return render_template('debug/telegram_diagnostic.html',
+                         bot_username=current_app.config.get('TELEGRAM_BOT_USERNAME'),
+                         has_token=bool(current_app.config.get('TELEGRAM_BOT_TOKEN')),
+                         app_url=current_app.config.get('APP_URL'),
+                         auth_url=url_for('auth.login_telegram', _external=True))

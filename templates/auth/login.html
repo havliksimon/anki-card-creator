@@ -34,7 +34,10 @@
         {% if telegram_bot_username and telegram_bot_username != 'your_bot_username' %}
         <!-- Telegram Login -->
         <div style="text-align: center;">
-            <script async src="https://telegram.org/js/telegram-widget.js?22" 
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                Bot: @{{ telegram_bot_username }}
+            </p>
+            <script async src="https://telegram.org/js/telegram-widget.js?23" 
                 data-telegram-login="{{ telegram_bot_username }}" 
                 data-size="large" 
                 data-auth-url="{{ url_for('auth.login_telegram', _external=True) }}"
@@ -49,12 +52,18 @@
                 ⚠️ {{ request.args.get('telegram_error') }}
             </p>
             {% endif %}
+            <p style="font-size: 0.75rem; margin-top: 0.5rem;">
+                <a href="/debug/telegram-diagnostic" style="color: var(--text-muted);">Having issues? Check diagnostic</a>
+            </p>
         </div>
         {% else %}
         <!-- Telegram not configured -->
         <div style="text-align: center; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
             <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">
                 Telegram login not configured
+            </p>
+            <p style="color: var(--danger); font-size: 0.75rem; margin-top: 0.5rem;">
+                Bot username: '{{ telegram_bot_username }}'
             </p>
         </div>
         {% endif %}
