@@ -330,8 +330,8 @@ class ScrapingService:
                     '--disable-renderer-backgrounding',
                     '--force-color-profile=srgb',
                     '--memory-model=low',
-                    '--max_old_space_size=64',
-                    '--js-flags=--max-old-space-size=64,--jitless',
+                    '--max_old_space_size=48',
+                    '--js-flags=--max-old-space-size=48,--jitless',
                     '--disable-javascript-harmony-shipping',
                     '--disable-site-isolation-trials'
                 ]
@@ -420,7 +420,7 @@ class ScrapingService:
         try:
             playwright, browser = self._get_playwright()
             if not playwright or not browser:
-                print("Browser not initialized")
+                print("Browser not initialized - possible memory issue")
                 return "", []
             
             # Create context with minimal memory usage
@@ -596,6 +596,23 @@ class ScrapingService:
                     # CRITICAL: Stroke GIFs are required - fail if not found
                     raise Exception(f"CRITICAL: No stroke GIFs found for {character}. Scraping failed.")
                 results[0]['stroke_order'] = ", ".join(stroke_urls)
+                
+                # Immediately download and cache stroke GIFs to R2 (same as old app)
+                def _cache_gifs():
+                    try:
+                        from src.services.r2_storage import r2_storage
+                        for idx, gif_url in enumerate(stroke_urls):
+                            try:
+                                response = requests.get(gif_url, timeout=10)
+                                if response.status_code == 200:
+                                    # Extract character from stroke_urls URL or use input character
+                                    char = character[idx] if idx < len(character) else character[0]
+                                    r2_storage.store_stroke_gif(char, idx + 1, response.content)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                threading.Thread(target=_cache_gifs, daemon=True).start()
             except Exception as e:
                 print(f"WrittenChinese scraping failed: {e}")
                 # Return with error indication - all 14 fields must be present
@@ -704,18 +721,12 @@ class ScrapingService:
             
             report("done", f"✅ {character} complete!")
             
-            # Cache audio and stroke GIFs in background after returning
-            # This is done after scraping so it doesn't slow down the user
+            # Cache TTS audio in background - GIFs already cached earlier
+            # This is done after returning so it doesn't slow down the user
             try:
                 def _delayed_cache():
                     # Cache main word audio
                     cache_audio(results[0]["audio_url"])
-                    
-                    # Cache stroke GIFs for each character
-                    if results[0].get("stroke_order"):
-                        for char in character:
-                            for order in range(1, 8):
-                                cache_stroke_gif(app_url, char, order)
                     
                     # Cache example sentence audio
                     for item in deepseek_results:
