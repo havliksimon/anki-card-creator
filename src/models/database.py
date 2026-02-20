@@ -1,10 +1,11 @@
 """Database connection and operations."""
 import os
 import sqlite3
-import httpx
 from typing import Optional, List, Dict, Any
 import json
 from datetime import datetime
+
+_httpx = None
 
 
 class Database:
@@ -13,11 +14,20 @@ class Database:
     def __init__(self):
         self._supabase_url: Optional[str] = None
         self._supabase_key: Optional[str] = None
-        self._client: Optional[httpx.Client] = None
+        self._client = None
         self._local_db_path = 'local.db'
+    
+    def _get_httpx(self):
+        """Lazy load httpx."""
+        global _httpx
+        if _httpx is None:
+            import httpx
+            _httpx = httpx
+        return _httpx
     
     def init_app(self, app):
         """Initialize database connection."""
+        httpx = self._get_httpx()
         if not app.config.get('USE_LOCAL_DB'):
             try:
                 self._supabase_url = app.config['SUPABASE_URL']

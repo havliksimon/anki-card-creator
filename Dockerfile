@@ -59,9 +59,6 @@ USER appuser
 # Set the browsers path for appuser too
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
-# Verify installation
-RUN python3 -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); b.close(); print('Playwright OK')"
-
 # Expose port
 EXPOSE 8000
 

@@ -9,30 +9,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-def verify_playwright():
-    """Verify Playwright browsers are installed."""
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            # Try to launch browser
-            browser = p.chromium.launch(headless=True)
-            browser.close()
-            print("✅ Playwright Chromium browser: OK")
-            return True
-    except Exception as e:
-        print(f"⚠️  Playwright browser check failed: {e}")
-        print("   Stroke GIF scraping will not work!")
-        print("   Run: python3 -m playwright install chromium")
-        return False
 
 def main():
     """Start the application based on mode."""
     print("="*60)
     print("ANKI CARD CREATOR - STARTUP")
-    print("="*60)
-    
-    # Verify Playwright is working
-    verify_playwright()
     print("="*60)
     
     enable_web = os.environ.get('ENABLE_WEB_INTERFACE', 'true').lower() == 'true'
@@ -85,7 +66,7 @@ def main():
         print("Memory optimized for 0.5GB RAM")
         print("="*60)
         
-        # Start Telegram bot in main thread (required for signal handlers)
+        # Import Flask only when needed
         from app import app
         from threading import Thread
         import logging
