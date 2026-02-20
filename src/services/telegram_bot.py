@@ -116,35 +116,49 @@ class TelegramBot:
     
     def _get_all_decks(self) -> List[Dict]:
         """Get all decks with word counts (for admin /list)."""
-        try:
-            all_words = db.get_all_words()
-        except:
-            all_words = []
-        
-        # Count words per user_id
-        deck_counts = {}
-        for word in all_words:
-            uid = word.get('user_id')
-            if uid:
-                deck_counts[uid] = deck_counts.get(uid, 0) + 1
-        
-        # Get users for info
+        # First, get all unique user_ids from words table via a simple count query
+        # We query each deck individually to get accurate counts
         try:
             users = db.get_users()
         except:
             users = []
         
-        # Build deck list
+        # Find admin user
+        admin_user = next((u for u in users if u.get('is_admin')), None)
+        admin_id = admin_user['id'] if admin_user else None
+        
+        # Get all words and extract unique user_ids
+        # Use a more reliable method - query words and get distinct user_ids
+        try:
+            all_words = db.get_all_words()
+            unique_user_ids = set()
+            for word in all_words:
+                uid = word.get('user_id')
+                if uid:
+                    unique_user_ids.add(uid)
+        except Exception as e:
+            logger.error(f"Error getting words: {e}")
+            unique_user_ids = set()
+        
+        # If we got no results, try querying admin's main deck at least
+        if not unique_user_ids and admin_id:
+            unique_user_ids.add(admin_id)
+        
+        # Build deck list with accurate counts
         decks = []
-        for uid, count in deck_counts.items():
+        for uid in unique_user_ids:
+            # Get accurate count by querying this specific deck
+            try:
+                words = db.get_words_by_user(uid)
+                count = len(words)
+            except:
+                count = 0
+            
             # Find user info
             user = next((u for u in users if u.get('id') == uid), None)
             if not user and uid.isdigit():
-                # Legacy numeric deck - find by checking words
-                for u in users:
-                    if u.get('is_admin'):
-                        user = u  # Assign to admin
-                        break
+                # Legacy numeric deck - assign to admin
+                user = admin_user
             
             is_admin_deck = user.get('is_admin', False) if user else False
             telegram_id = user.get('telegram_id', '') if user else ''
@@ -860,13 +874,26 @@ class TelegramBot:
             return
         
         # Check if words exist in other decks (for copying)
+        # Search ALL words in database, including legacy numeric decks
         global_words = {}
-        all_users = db.get_users()
-        for u in all_users:
-            u_words = db.get_words_by_user(u['id'])
-            for w in u_words:
-                if w['character'] in new_words and w['character'] not in global_words:
-                    global_words[w['character']] = w
+        try:
+            all_words_in_db = db.get_all_words()
+            for w in all_words_in_db:
+                char = w.get('character')
+                if char in new_words and char not in global_words:
+                    global_words[char] = w
+        except Exception as e:
+            logger.error(f"Error searching all words: {e}")
+            # Fallback: search user decks
+            all_users = db.get_users()
+            for u in all_users:
+                try:
+                    u_words = db.get_words_by_user(u['id'])
+                    for w in u_words:
+                        if w['character'] in new_words and w['character'] not in global_words:
+                            global_words[w['character']] = w
+                except:
+                    pass
         
         words_to_copy = [w for w in new_words if w in global_words]
         words_to_scrape = [w for w in new_words if w not in global_words]
@@ -897,10 +924,15 @@ class TelegramBot:
                     'real_usage_examples': source.get('real_usage_examples', ''),
                     'user_id': deck_id
                 }
-                db.create_word(word_details)
-                copied.append(word_text)
+                result = db.create_word(word_details)
+                if result:
+                    copied.append(word_text)
+                    logger.info(f"Copied '{word_text}' to deck {deck_id}")
+                else:
+                    logger.error(f"Failed to copy '{word_text}' - create_word returned None")
+                    failed.append(word_text)
             except Exception as e:
-                logger.error(f"Error copying {word_text}: {e}")
+                logger.error(f"Error copying {word_text}: {e}", exc_info=True)
                 failed.append(word_text)
         
         # Scrape new words
@@ -908,10 +940,15 @@ class TelegramBot:
             try:
                 details = dictionary_service.get_word_details(word_text)
                 details['user_id'] = deck_id
-                db.create_word(details)
-                added.append(word_text)
+                result = db.create_word(details)
+                if result:
+                    added.append(word_text)
+                    logger.info(f"Scraped and added '{word_text}' to deck {deck_id}")
+                else:
+                    logger.error(f"Failed to add scraped word '{word_text}'")
+                    failed.append(word_text)
             except Exception as e:
-                logger.error(f"Error scraping {word_text}: {e}")
+                logger.error(f"Error scraping {word_text}: {e}", exc_info=True)
                 failed.append(word_text)
         
         # Result
