@@ -21,20 +21,18 @@ def main():
         print("Telegram bot: ENABLED")
         print("="*60)
         
-        # Start Telegram bot in a separate thread
-        from threading import Thread
-        from app import app
+        # Start Telegram bot as a separate process (not thread - survives gunicorn fork)
+        import multiprocessing
         
-        # Initialize database for bot
-        with app.app_context():
+        def run_bot_process():
+            from app import app
             from src.services.telegram_bot import telegram_bot
-            
-            def run_bot():
+            with app.app_context():
                 telegram_bot.run()
-            
-            bot_thread = Thread(target=run_bot, daemon=True)
-            bot_thread.start()
-            print("Telegram bot started in background")
+        
+        bot_proc = multiprocessing.Process(target=run_bot_process, daemon=True)
+        bot_proc.start()
+        print("Telegram bot started as separate process")
         
         # Start gunicorn for web server
         port = os.environ.get('PORT', '8000')

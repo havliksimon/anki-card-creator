@@ -461,14 +461,24 @@ class ScrapingService:
         
         return meaning, stroke_order_urls
     
-    def scrape_word_details(self, character: str) -> Tuple:
+    def scrape_word_details(self, character: str, progress_callback=None) -> Tuple:
         """
         Scrape complete word details - EXACT copy from old app.
+        
+        Args:
+            character: Chinese character to scrape
+            progress_callback: Optional callback function(stage_name, message) for progress updates
+            
         Returns: (pinyin, definition, stroke_gifs, pronunciation, example_link, 
                   exemplary_image, meaning, reading, component1, component2, 
                   styled_term, usage_examples, real_usage_examples)
         """
+        def report(stage, message):
+            if progress_callback:
+                progress_callback(stage, message)
+        
         if not self._ensure_driver():
+            report("error", "WebDriver not available")
             return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
         
         app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
@@ -477,6 +487,7 @@ class ScrapingService:
         
         try:
             # Get example sentences from ChineseBoost
+            report("chineseboost", f"🔍 Scraping ChineseBoost for {character}...")
             reading_results = self.scrape_chinese_sentences(character)
             
             # Build component2 and reading from ChineseBoost results
@@ -503,12 +514,14 @@ class ScrapingService:
                     print(f"Error building reading: {e}")
             
             # Get main word data from MDBG
+            report("mdbg", f"📖 Scraping MDBG for {character}...")
             results = self.scrape_mdbg(character)
             
             if not results:
                 return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
             
             # Get stroke order and meaning from WrittenChinese
+            report("writtenchinese", f"🎨 Scraping WrittenChinese for {character} GIFs...")
             meaning, stroke_urls = self.scrape_writtenchinese(character)
             if stroke_urls:
                 results[0]['stroke_order'] = ", ".join(stroke_urls)
@@ -537,6 +550,7 @@ class ScrapingService:
                 print(f"Error reordering results: {e}")
             
             # Get exemplary_image from Unsplash
+            report("unsplash", f"🖼️ Fetching image from Unsplash for {character}...")
             exemplary_image = ""
             if unsplash_api_key:
                 try:
@@ -579,6 +593,8 @@ class ScrapingService:
                 real_usage_examples.append(html)
             
             real_usage_examples_str = ''.join(real_usage_examples)
+            
+            report("done", f"✅ {character} complete!")
             
             # Return format matches old app exactly
             return (

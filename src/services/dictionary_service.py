@@ -22,10 +22,15 @@ class DictionaryService:
         self.app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
         self.tts_api_url = f"{self.app_url}/api/tts"
     
-    def get_word_details(self, character: str) -> Dict[str, Any]:
-        """Get full word details using web scraping (exactly like old app)."""
+    def get_word_details(self, character: str, progress_callback=None) -> Dict[str, Any]:
+        """Get full word details using web scraping (exactly like old app).
+        
+        Args:
+            character: Chinese character to look up
+            progress_callback: Optional callback function(stage, message) for progress updates
+        """
         # Use the scraping service exactly like the old app
-        scraped_data = scraping_service.scrape_word_details(character)
+        scraped_data = scraping_service.scrape_word_details(character, progress_callback)
         
         # Unpack the returned tuple (same order as old app)
         pinyin, translation, stroke_gifs, pronunciation, example_link, \

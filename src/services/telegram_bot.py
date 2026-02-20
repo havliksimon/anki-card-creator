@@ -735,15 +735,44 @@ class TelegramBotService:
         added = []
         failed = []
         
-        for word_text in new_words:
+        for i, word_text in enumerate(new_words):
             try:
-                word_details = dictionary_service.get_word_details(word_text)
+                # Create progress callback for this word
+                async def progress_callback(stage: str, message: str):
+                    try:
+                        progress_text = (
+                            f"⏳ Processing {i+1}/{len(new_words)}: {word_text}\n"
+                            f"{message}"
+                        )
+                        await status_message.edit_text(progress_text)
+                    except:
+                        pass
+                
+                # Update status to show current progress
+                await progress_callback("start", f"🔄 Starting scrape for {word_text}...")
+                
+                word_details = dictionary_service.get_word_details(word_text, progress_callback)
                 word_details['user_id'] = user_data['id']
                 db.create_word(word_details)
                 added.append(word_text)
+                
+                # Show brief success indicator
+                success_text = (
+                    f"✅ {word_text} added!\n"
+                    f"📝 {(word_details.get('pinyin') or '')[:30]}..."
+                )
+                try:
+                    await status_message.edit_text(success_text)
+                except:
+                    pass
+                    
             except Exception as e:
                 logger.error(f"Error adding word {word_text}: {e}")
                 failed.append(word_text)
+                try:
+                    await status_message.edit_text(f"❌ Failed: {word_text}")
+                except:
+                    pass
         
         # Update status message
         result_text = f"✅ Added {len(added)} words!\n"
