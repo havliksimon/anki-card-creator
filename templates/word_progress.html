@@ -1,0 +1,370 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<style>
+.progress-container {
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 30px;
+    background: var(--bg-tertiary);
+    border-radius: 15px;
+    overflow: hidden;
+    margin: 1rem 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+}
+
+.stage-indicator {
+    display: flex;
+    justify-content: space-between;
+    margin: 2rem 0;
+    position: relative;
+}
+
+.stage-indicator::before {
+    content: '';
+    position: absolute;
+    top: 15px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--bg-tertiary);
+    z-index: 0;
+}
+
+.stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 1;
+}
+
+.stage-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.stage.active .stage-dot {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+.stage.complete .stage-dot {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.stage-label {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.stage.active .stage-label {
+    color: var(--primary);
+    font-weight: bold;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.log-output {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-top: 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+.log-entry {
+    margin: 0.25rem 0;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-time {
+    color: var(--text-secondary);
+    margin-right: 0.5rem;
+}
+
+.word-list {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+}
+
+.word-tag {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    margin: 0.25rem;
+    background: var(--primary);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.875rem;
+}
+
+.results-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--radius);
+}
+
+.results-box.success {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid var(--success);
+}
+
+.results-box.error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+}
+</style>
+
+<div class="progress-container">
+    <h2 style="text-align: center; margin-bottom: 1rem;">{{ title }}</h2>
+    
+    {% if words|length > 1 %}
+    <div class="word-list">
+        <strong>Words to process ({{ words|length }}):</strong><br>
+        {% for word in words %}
+            <span class="word-tag">{{ word }}</span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; font-size: 2rem; margin: 1rem 0;">
+        {{ words[0] if words else 'Unknown' }}
+    </div>
+    {% endif %}
+    
+    <!-- Progress Bar -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width: 0%;">
+            0%
+        </div>
+    </div>
+    
+    <!-- Stage Indicators -->
+    <div class="stage-indicator">
+        <div class="stage" id="stage-init">
+            <div class="stage-dot">1</div>
+            <div class="stage-label">Initialize</div>
+        </div>
+        <div class="stage" id="stage-pinyin">
+            <div class="stage-dot">2</div>
+            <div class="stage-label">Pinyin</div>
+        </div>
+        <div class="stage" id="stage-examples">
+            <div class="stage-dot">3</div>
+            <div class="stage-label">Examples</div>
+        </div>
+        <div class="stage" id="stage-image">
+            <div class="stage-dot">4</div>
+            <div class="stage-label">Image</div>
+        </div>
+        <div class="stage" id="stage-audio">
+            <div class="stage-dot">5</div>
+            <div class="stage-label">Audio</div>
+        </div>
+        <div class="stage" id="stage-saving">
+            <div class="stage-dot">6</div>
+            <div class="stage-label">Save</div>
+        </div>
+    </div>
+    
+    <!-- Current Status Message -->
+    <div style="text-align: center; font-size: 1.1rem; margin: 1rem 0; color: var(--text-secondary);" id="status-message">
+        Initializing...
+    </div>
+    
+    <!-- Log Output -->
+    <div class="log-output" id="log-output">
+        <div class="log-entry"><span class="log-time">[{{ now }}]</span> Starting {{ operation }} operation...</div>
+    </div>
+    
+    <!-- Results Section (hidden initially) -->
+    <div id="results-section" style="display: none;">
+        <div class="results-box" id="results-box">
+            <h3>Operation Complete!</h3>
+            <div id="results-content"></div>
+        </div>
+        <div style="text-align: center; margin-top: 1rem;">
+            <a href="{{ url_for('main.dictionary') }}" class="btn btn-primary">Back to Dictionary</a>
+            {% if operation == 'refresh' and words|length == 1 %}
+            <a href="{{ url_for('main.word_detail', character=words[0]) }}" class="btn btn-secondary">View Updated Card</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+const operation = '{{ operation }}';
+const words = {{ words | tojson }};
+let isComplete = false;
+
+// Stage mapping
+const stages = {
+    'init': 'stage-init',
+    'checking': 'stage-init',
+    'finding': 'stage-init',
+    'pinyin': 'stage-pinyin',
+    'examples': 'stage-examples',
+    'image': 'stage-image',
+    'audio': 'stage-audio',
+    'saving': 'stage-saving',
+    'complete': 'stage-saving',
+    'error': null
+};
+
+function addLog(message) {
+    const logOutput = document.getElementById('log-output');
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+    logOutput.appendChild(entry);
+    logOutput.scrollTop = logOutput.scrollHeight;
+}
+
+function updateProgress(progress, stage, message) {
+    // Update progress bar
+    const progressFill = document.getElementById('progress-fill');
+    progressFill.style.width = progress + '%';
+    progressFill.textContent = progress + '%';
+    
+    // Update status message
+    document.getElementById('status-message').textContent = message;
+    addLog(message);
+    
+    // Update stage indicators
+    const stageOrder = ['init', 'checking', 'finding', 'pinyin', 'examples', 'image', 'audio', 'saving', 'complete'];
+    const currentStageIndex = stageOrder.indexOf(stage);
+    
+    stageOrder.forEach((s, index) => {
+        const stageId = stages[s];
+        if (stageId) {
+            const el = document.getElementById(stageId);
+            el.classList.remove('active', 'complete');
+            if (index < currentStageIndex) {
+                el.classList.add('complete');
+            } else if (index === currentStageIndex && s !== 'complete') {
+                el.classList.add('active');
+            }
+        }
+    });
+}
+
+function showResults() {
+    document.getElementById('results-section').style.display = 'block';
+    isComplete = true;
+    
+    // Fetch results from server
+    fetch('{{ url_for("main.operation_status_api") }}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.stage === 'complete') {
+                document.getElementById('results-box').classList.add('success');
+                document.getElementById('results-content').innerHTML = `
+                    <p><strong>${data.message}</strong></p>
+                `;
+            } else if (data.stage === 'error') {
+                document.getElementById('results-box').classList.add('error');
+                document.getElementById('results-content').innerHTML = `
+                    <p><strong>Error:</strong> ${data.message}</p>
+                `;
+            }
+        });
+}
+
+function pollStatus() {
+    if (isComplete) return;
+    
+    fetch('{{ url_for("main.operation_status_api") }}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.stage && data.stage !== 'idle') {
+                updateProgress(data.progress, data.stage, data.message);
+                
+                if (data.stage === 'complete' || data.stage === 'error') {
+                    showResults();
+                    return;
+                }
+            }
+            
+            setTimeout(pollStatus, 500);
+        })
+        .catch(err => {
+            console.error('Error polling status:', err);
+            setTimeout(pollStatus, 1000);
+        });
+}
+
+// Start the operation and polling
+function startOperation() {
+    const endpoint = operation === 'add' 
+        ? '{{ url_for("main.add_word_process") }}'
+        : '{{ url_for("main.refresh_word_process", character=words[0]) }}';
+    
+    fetch(endpoint, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'started') {
+                addLog('Operation started successfully');
+                pollStatus();
+            } else {
+                addLog('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            addLog('Error starting operation: ' + err.message);
+        });
+}
+
+// Start when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    addLog('Page loaded, starting operation...');
+    setTimeout(startOperation, 500);
+});
+</script>
+{% endblock %}

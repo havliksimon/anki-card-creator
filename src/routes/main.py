@@ -1,5 +1,6 @@
 """Main application routes."""
 import io
+import time
 from urllib.parse import unquote
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, current_app, session
 from flask_login import login_required, current_user
@@ -15,12 +16,33 @@ from src.utils.chinese_utils import (
 
 main_bp = Blueprint('main', __name__)
 
+# Global dict to track progress for long-running operations
+# Structure: {user_id: {'operation': 'add_word', 'stage': 'generating_audio', 'progress': 50, 'message': 'Generating audio...'}}
+operation_status = {}
+
 
 def get_current_deck_id():
     """Get current deck ID for the logged-in user."""
     if not current_user.is_authenticated:
         return None
     return deck_manager.get_current_deck_id(current_user.id)
+
+
+def set_operation_status(user_id: str, operation: str, stage: str, progress: int, message: str):
+    """Set operation status for a user."""
+    operation_status[user_id] = {
+        'operation': operation,
+        'stage': stage,
+        'progress': progress,
+        'message': message,
+        'timestamp': time.time()
+    }
+
+
+def clear_operation_status(user_id: str):
+    """Clear operation status for a user."""
+    if user_id in operation_status:
+        del operation_status[user_id]
 
 
 @main_bp.route('/')
@@ -174,34 +196,9 @@ def add_word():
             flash('No Chinese characters found.', 'error')
             return redirect(url_for('main.add_word'))
         
-        added = []
-        existing = []
-        
-        for word_text in chinese_words:
-            # Check if word already exists in current deck
-            words_in_deck = db.get_words_by_user(current_user.id, deck_id)
-            existing_word = next((w for w in words_in_deck if w.get('character') == word_text), None)
-            
-            if existing_word:
-                existing.append(word_text)
-                continue
-            
-            # Get word details
-            try:
-                word_details = dictionary_service.get_word_details(word_text)
-                word_details['user_id'] = deck_id  # Store with deck_id
-                db.create_word(word_details)
-                added.append(word_text)
-            except Exception as e:
-                current_app.logger.error(f"Error adding word {word_text}: {e}")
-                flash(f'Error adding word: {word_text}', 'error')
-        
-        if added:
-            flash(f'Added {len(added)} word(s): {", ".join(added)}', 'success')
-        if existing:
-            flash(f'Skipped {len(existing)} existing word(s): {", ".join(existing)}', 'info')
-        
-        return redirect(url_for('main.dictionary'))
+        # Store words to process and redirect to progress page
+        session['pending_words'] = chinese_words
+        return redirect(url_for('main.add_word_progress'))
     
     # Get deck info for display
     decks = deck_manager.get_user_decks(current_user.id)
@@ -212,6 +209,218 @@ def add_word():
                          deck_id=deck_id,
                          deck_label=current_deck_label,
                          deck_number=current_deck_num)
+
+
+@main_bp.route('/add-word-progress')
+@login_required
+def add_word_progress():
+    """Show progress page for adding words."""
+    pending_words = session.get('pending_words', [])
+    if not pending_words:
+        flash('No words to add.', 'info')
+        return redirect(url_for('main.add_word'))
+    
+    return render_template('word_progress.html',
+                         words=pending_words,
+                         operation='add',
+                         title='Adding Words')
+
+
+@main_bp.route('/api/add-word-process', methods=['POST'])
+@login_required
+def add_word_process():
+    """Process adding words with progress tracking (AJAX endpoint)."""
+    import threading
+    
+    pending_words = session.get('pending_words', [])
+    if not pending_words:
+        return jsonify({'error': 'No pending words'}), 400
+    
+    deck_id = get_current_deck_id()
+    user_id = current_user.id
+    
+    def process_words():
+        """Process words in background with progress updates."""
+        added = []
+        existing = []
+        failed = []
+        
+        total = len(pending_words)
+        
+        for idx, word_text in enumerate(pending_words):
+            # Check if word already exists in current deck
+            set_operation_status(user_id, 'add_word', 'checking', 
+                               int((idx / total) * 10), 
+                               f'Checking "{word_text}"...')
+            
+            words_in_deck = db.get_words_by_user(user_id, deck_id)
+            existing_word = next((w for w in words_in_deck if w.get('character') == word_text), None)
+            
+            if existing_word:
+                existing.append(word_text)
+                continue
+            
+            # Get word details with progress stages
+            try:
+                # Stage 1: Generating pinyin and styling
+                set_operation_status(user_id, 'add_word', 'pinyin', 
+                                   int((idx / total) * 100) + 10,
+                                   f'Generating pinyin for "{word_text}"...')
+                time.sleep(0.1)  # Small delay for UI update
+                
+                # Stage 2: Fetching examples
+                set_operation_status(user_id, 'add_word', 'examples',
+                                   int((idx / total) * 100) + 30,
+                                   f'Fetching example sentences for "{word_text}"...')
+                
+                # Stage 3: Getting image
+                set_operation_status(user_id, 'add_word', 'image',
+                                   int((idx / total) * 100) + 50,
+                                   f'Getting image for "{word_text}"...')
+                
+                # Stage 4: Generating audio
+                set_operation_status(user_id, 'add_word', 'audio',
+                                   int((idx / total) * 100) + 70,
+                                   f'Generating audio for "{word_text}"...')
+                
+                # Actually get word details
+                word_details = dictionary_service.get_word_details(word_text)
+                word_details['user_id'] = deck_id
+                
+                # Stage 5: Saving to database
+                set_operation_status(user_id, 'add_word', 'saving',
+                                   int((idx / total) * 100) + 90,
+                                   f'Saving "{word_text}" to database...')
+                
+                db.create_word(word_details)
+                added.append(word_text)
+                
+            except Exception as e:
+                current_app.logger.error(f"Error adding word {word_text}: {e}")
+                failed.append(word_text)
+        
+        # Store results
+        set_operation_status(user_id, 'add_word', 'complete', 100, 
+                           f'Added {len(added)}, skipped {len(existing)}, failed {len(failed)}')
+        
+        session['add_results'] = {
+            'added': added,
+            'existing': existing,
+            'failed': failed
+        }
+        
+        # Clear pending words
+        session.pop('pending_words', None)
+    
+    # Start processing in background
+    thread = threading.Thread(target=process_words)
+    thread.start()
+    
+    return jsonify({'status': 'started'})
+
+
+@main_bp.route('/api/operation-status')
+@login_required
+def operation_status_api():
+    """Get current operation status."""
+    user_id = current_user.id
+    status = operation_status.get(user_id, {})
+    
+    # Check if status is stale (older than 5 minutes)
+    if status and time.time() - status.get('timestamp', 0) > 300:
+        clear_operation_status(user_id)
+        return jsonify({'stage': 'idle', 'progress': 0, 'message': 'No active operation'})
+    
+    return jsonify(status)
+
+
+@main_bp.route('/refresh-word/<character>', methods=['GET', 'POST'])
+@login_required
+def refresh_word(character):
+    """Refresh/regenerate a word's data."""
+    # URL decode the character
+    decoded_character = unquote(character)
+    
+    if request.method == 'GET':
+        # Show confirmation/progress page
+        return render_template('word_progress.html',
+                             words=[decoded_character],
+                             operation='refresh',
+                             title=f'Refreshing "{decoded_character}"')
+    
+    # POST - start the refresh process via AJAX
+    return redirect(url_for('main.refresh_word_progress', character=character))
+
+
+@main_bp.route('/api/refresh-word-process/<character>', methods=['POST'])
+@login_required
+def refresh_word_process(character):
+    """Process word refresh with progress tracking."""
+    import threading
+    
+    decoded_character = unquote(character)
+    deck_id = get_current_deck_id()
+    user_id = current_user.id
+    
+    def process_refresh():
+        """Refresh word in background with progress updates."""
+        try:
+            # Stage 1: Finding existing word
+            set_operation_status(user_id, 'refresh_word', 'finding', 5,
+                               f'Finding "{decoded_character}" in database...')
+            
+            words = db.get_words_by_user(user_id, deck_id)
+            existing_word = next((w for w in words if w.get('character') == decoded_character), None)
+            
+            if not existing_word:
+                set_operation_status(user_id, 'refresh_word', 'error', 0,
+                                   f'Word "{decoded_character}" not found')
+                return
+            
+            word_id = existing_word.get('id')
+            
+            # Stage 2: Generating pinyin
+            set_operation_status(user_id, 'refresh_word', 'pinyin', 15,
+                               f'Regenerating pinyin for "{decoded_character}"...')
+            time.sleep(0.2)
+            
+            # Stage 3: Fetching examples from DeepSeek
+            set_operation_status(user_id, 'refresh_word', 'examples', 35,
+                               f'Fetching new example sentences for "{decoded_character}"...')
+            
+            # Stage 4: Getting image from Unsplash
+            set_operation_status(user_id, 'refresh_word', 'image', 55,
+                               f'Getting new image for "{decoded_character}"...')
+            
+            # Stage 5: Generating audio
+            set_operation_status(user_id, 'refresh_word', 'audio', 75,
+                               f'Regenerating audio for "{decoded_character}"...')
+            
+            # Get fresh word details
+            word_details = dictionary_service.get_word_details(decoded_character)
+            word_details['user_id'] = deck_id
+            
+            # Stage 6: Saving to database
+            set_operation_status(user_id, 'refresh_word', 'saving', 90,
+                               f'Saving updated "{decoded_character}"...')
+            
+            # Delete old word and create new one
+            db.delete_word(word_id, user_id, deck_id)
+            db.create_word(word_details)
+            
+            set_operation_status(user_id, 'refresh_word', 'complete', 100,
+                               f'Successfully refreshed "{decoded_character}"!')
+            
+        except Exception as e:
+            current_app.logger.error(f"Error refreshing word {decoded_character}: {e}")
+            set_operation_status(user_id, 'refresh_word', 'error', 0,
+                               f'Error refreshing "{decoded_character}": {str(e)}')
+    
+    # Start processing in background
+    thread = threading.Thread(target=process_refresh)
+    thread.start()
+    
+    return jsonify({'status': 'started'})
 
 
 @main_bp.route('/delete-word/<int:word_id>', methods=['POST'])

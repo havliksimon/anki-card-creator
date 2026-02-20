@@ -1,6 +1,5 @@
 """Deck management for multi-deck support."""
 from typing import List, Dict, Optional, Tuple
-from flask import session, current_app
 
 
 class DeckManager:
@@ -37,22 +36,30 @@ class DeckManager:
     
     def get_current_deck_id(self, user_id: str) -> str:
         """Get current deck ID from session or default to deck 1."""
-        session_key = f'deck_id_{user_id}'
-        deck_id = session.get(session_key)
-        if deck_id:
-            return deck_id
+        try:
+            from flask import session
+            session_key = f'deck_id_{user_id}'
+            deck_id = session.get(session_key)
+            if deck_id:
+                return deck_id
+        except RuntimeError:
+            # Outside of application context
+            pass
         return self.get_deck_id(user_id, 1)
     
     def set_current_deck(self, user_id: str, deck_number: int):
         """Set current deck for user in session."""
+        from flask import session
+        import logging
         session_key = f'deck_id_{user_id}'
         deck_id = self.get_deck_id(user_id, deck_number)
         session[session_key] = deck_id
-        current_app.logger.info(f"Set deck for user {user_id}: {deck_id} (deck {deck_number})")
+        logging.info(f"Set deck for user {user_id}: {deck_id} (deck {deck_number})")
     
     def get_user_decks(self, user_id: str) -> List[Dict]:
         """Get all decks for a user - works with BOTH legacy numeric IDs and new format."""
         from src.models.database import db
+        import logging
         decks = []
         
         # Method 1: Check user_decks table (if it exists)
@@ -66,7 +73,7 @@ class DeckManager:
                     if isinstance(d, dict) and 'deck_id' in d:
                         decks.append(d)
         except Exception as e:
-            current_app.logger.debug(f"user_decks table query failed (expected if table doesn't exist): {e}")
+            logging.debug(f"user_decks table query failed (expected if table doesn't exist): {e}")
         
         # Method 2: Check words table for all user IDs belonging to this user
         # This handles BOTH:
@@ -95,14 +102,17 @@ class DeckManager:
             
             # Also check for numeric user_ids (legacy format where user_id was "2", "3", etc.)
             # These belong to the admin user based on our data analysis
-            all_words_all_users = db._client.get("/words?select=*").json()
-            if isinstance(all_words_all_users, list):
-                for word in all_words_all_users:
-                    word_uid = str(word.get('user_id', ''))
-                    # If it's a pure numeric ID (not a UUID), it might be a legacy deck
-                    if word_uid.isdigit():
-                        deck_num = int(word_uid)
-                        deck_numbers_found.add(deck_num)
+            try:
+                all_words_all_users = db._client.get("/words?select=*").json()
+                if isinstance(all_words_all_users, list):
+                    for word in all_words_all_users:
+                        word_uid = str(word.get('user_id', ''))
+                        # If it's a pure numeric ID (not a UUID), it might be a legacy deck
+                        if word_uid.isdigit():
+                            deck_num = int(word_uid)
+                            deck_numbers_found.add(deck_num)
+            except Exception as e:
+                logging.debug(f"Could not scan all words: {e}")
             
             # Create deck entries for all found deck numbers
             existing_numbers = {d['deck_number'] for d in decks}
@@ -122,7 +132,7 @@ class DeckManager:
             
             decks.sort(key=lambda x: x['deck_number'])
         except Exception as e:
-            current_app.logger.error(f"Error scanning words for decks: {e}")
+            logging.error(f"Error scanning words for decks: {e}")
         
         if decks:
             return decks

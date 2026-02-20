@@ -62,6 +62,9 @@
                             <td>
                                 <div style="display: flex; gap: 0.5rem;">
                                     <a href="{{ url_for('main.word_detail', character=word.character) }}" class="btn btn-sm btn-primary">View</a>
+                                    {% if current_user.is_admin_user %}
+                                    <a href="{{ url_for('main.refresh_word', character=word.character) }}" class="btn btn-sm btn-warning" title="Refresh/regenerate card data">🔄</a>
+                                    {% endif %}
                                     <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
                                           onsubmit="return confirm('Delete {{ word.character }}?');" style="margin: 0;">
                                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>

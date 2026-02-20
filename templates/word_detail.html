@@ -129,6 +129,9 @@
                 </button>
                 <audio id="audio-main" src="{{ word.pronunciation }}"></audio>
             {% endif %}
+            {% if current_user.is_admin_user %}
+                <a href="{{ url_for('main.refresh_word', character=word.character) }}" class="btn btn-warning">🔄 Refresh Card</a>
+            {% endif %}
             <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
                   onsubmit="return confirm('Delete this word?');">
                 <button type="submit" class="btn btn-danger">Delete</button>
