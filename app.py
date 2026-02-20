@@ -9,19 +9,21 @@ from src.config import config
 from src.models.database import db
 from src.models.user import User
 from src.utils.email_service import init_mail
-from src.routes.auth import auth_bp
-from src.routes.main import main_bp
-from src.routes.admin import admin_bp
-from src.routes.api import api_bp
-from src.routes.debug import debug_bp
 from flask import request  # Import for rate limiter
 
 
 def create_app(config_name=None):
     """Application factory."""
     config_name = config_name or os.environ.get('FLASK_ENV', 'production')
+    
+    # Check if web interface should be enabled
+    enable_web = os.environ.get('ENABLE_WEB_INTERFACE', 'true').lower() == 'true'
+    
     app = Flask(__name__)
     app.config.from_object(config.get(config_name, config['production']))
+    
+    # Store web enabled flag in config
+    app.config['ENABLE_WEB_INTERFACE'] = enable_web
     
     # Set session lifetime
     app.permanent_session_lifetime = timedelta(days=7)
@@ -48,32 +50,63 @@ def create_app(config_name=None):
         default_limits=["200 per day", "50 per hour"]
     )
     
-    # Register blueprints
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(main_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(api_bp)
-    app.register_blueprint(debug_bp)
-    
-    # Error handlers
-    @app.errorhandler(404)
-    def not_found(error):
-        return render_template('errors/404.html'), 404
-    
-    @app.errorhandler(500)
-    def internal_error(error):
-        return render_template('errors/500.html'), 500
-    
-    @app.errorhandler(429)
-    def rate_limit(error):
-        return render_template('errors/429.html'), 429
+    # Register blueprints based on mode
+    if enable_web:
+        # Full web mode - load all routes
+        from src.routes.auth import auth_bp
+        from src.routes.main import main_bp
+        from src.routes.admin import admin_bp
+        from src.routes.api import api_bp
+        from src.routes.debug import debug_bp
+        
+        app.register_blueprint(auth_bp)
+        app.register_blueprint(main_bp)
+        app.register_blueprint(admin_bp)
+        app.register_blueprint(api_bp)
+        app.register_blueprint(debug_bp)
+        
+        # Error handlers for web
+        @app.errorhandler(404)
+        def not_found(error):
+            return render_template('errors/404.html'), 404
+        
+        @app.errorhandler(500)
+        def internal_error(error):
+            return render_template('errors/500.html'), 500
+        
+        @app.errorhandler(429)
+        def rate_limit(error):
+            return render_template('errors/429.html'), 429
+    else:
+        # Telegram-only mode - minimal routes
+        @app.route('/')
+        def telegram_only_index():
+            return """
+            <html>
+            <head><title>Anki Card Creator - Telegram Bot</title></head>
+            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+                <h1>🤖 Anki Card Creator</h1>
+                <p>This instance is running in <strong>Telegram-only mode</strong> for optimized performance.</p>
+                <p>The web interface is disabled to save memory.</p>
+                <h2>Use the Telegram Bot:</h2>
+                <p><a href="https://t.me/anki_card_creator_bot" style="font-size: 18px; padding: 10px 20px; background: #0088cc; color: white; text-decoration: none; border-radius: 5px;">@anki_card_creator_bot</a></p>
+                <hr>
+                <p style="color: #666; font-size: 14px;">To enable web interface, set ENABLE_WEB_INTERFACE=true</p>
+            </body>
+            </html>
+            """
+        
+        @app.route('/health')
+        def health_check():
+            return {'status': 'ok', 'mode': 'telegram_only'}
     
     # Context processors
     @app.context_processor
     def inject_globals():
         return {
             'app_name': 'Anki Card Creator',
-            'telegram_bot_username': app.config.get('TELEGRAM_BOT_USERNAME', '')
+            'telegram_bot_username': app.config.get('TELEGRAM_BOT_USERNAME', ''),
+            'web_enabled': enable_web
         }
     
     # Create admin user if configured

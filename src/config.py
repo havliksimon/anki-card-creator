@@ -50,6 +50,9 @@ class Config:
     RATELIMIT_STORAGE_URI = 'memory://'
     RATELIMIT_STRATEGY = 'fixed-window'
     RATELIMIT_DEFAULT = "100 per minute"
+    
+    # Performance mode
+    ENABLE_WEB_INTERFACE = os.environ.get('ENABLE_WEB_INTERFACE', 'true').lower() == 'true'
 
 
 class DevelopmentConfig(Config):

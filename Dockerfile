@@ -65,5 +65,5 @@ RUN python3 -c "from src.services.scraping_service import scraping_service; prin
 # Expose port
 EXPOSE 8000
 
-# Run the application with gunicorn
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "120"]
+# Run the application with startup script
+CMD ["python3", "start.py"]
