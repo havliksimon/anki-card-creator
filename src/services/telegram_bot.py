@@ -981,10 +981,14 @@ class TelegramBot:
     def run(self):
         """Run the bot."""
         if not self.initialize():
+            logger.error("Failed to initialize bot!")
             return
         
         logger.info("Starting Telegram bot...")
-        self.application.run_polling()
+        
+        # Use application.run_polling which handles event loop properly
+        # close_loop=False prevents it from closing our loop
+        self.application.run_polling(close_loop=False)
 
 
 # Global instance
