@@ -18,7 +18,7 @@ This bot replicates all functionality from the old CLI bot:
 Admin commands:
 - /admin - Admin menu
 - /stats - Show system statistics
-- /refresh - Refresh word data
+- /refresh - Refresh word data (admin only)
 - /wipedict - Wipe a deck
 """
 import os
@@ -104,6 +104,7 @@ class TelegramBotService:
         self.application.add_handler(CommandHandler("admin", self.cmd_admin))
         self.application.add_handler(CommandHandler("stats", self.cmd_stats))
         self.application.add_handler(CommandHandler("wipedict", self.cmd_wipedict))
+        self.application.add_handler(CommandHandler("refresh", self.cmd_refresh))
         
         # Callback handlers for inline keyboards
         self.application.add_handler(CallbackQueryHandler(self.callback_handler, pattern="^"))
@@ -598,6 +599,7 @@ class TelegramBotService:
             "🔧 *Admin Menu*\n\n"
             "/stats - System statistics\n"
             "/wipedict [user_id] - Wipe user deck\n"
+            "/refresh [word] - Refresh word data\n"
             "/admin - Show this menu"
         )
         await update.message.reply_text(admin_text, parse_mode='Markdown')
@@ -639,6 +641,40 @@ class TelegramBotService:
         target_user_id = args[0]
         db.delete_all_words(target_user_id)
         await update.message.reply_text(f"✅ Wiped all words for user {target_user_id}")
+    
+    async def cmd_refresh(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /refresh command (admin only) - refresh word data."""
+        user = update.effective_user
+        
+        if not self._is_admin(user.id):
+            await update.message.reply_text("🚫 Access denied.")
+            return
+        
+        args = context.args
+        if not args:
+            await update.message.reply_text("Usage: /refresh [chinese_word]")
+            return
+        
+        word = args[0]
+        status_msg = await update.message.reply_text(f"⏳ Refreshing data for: {word}")
+        
+        try:
+            # Get fresh word details with scraping
+            word_details = dictionary_service.get_word_details(word)
+            
+            # Show what was retrieved
+            result_text = f"✅ Refreshed: {word}\n\n"
+            result_text += f"📍 Pinyin: {word_details.get('pinyin', 'N/A')[:50]}...\n"
+            result_text += f"📚 Translation: {word_details.get('translation', 'N/A')[:50]}...\n"
+            result_text += f"🎨 Stroke GIFs: {'YES' if word_details.get('stroke_gifs') else 'NO'}\n"
+            result_text += f"🖼️ Image: {'YES' if word_details.get('exemplary_image') else 'NO'}\n"
+            result_text += f"💬 Examples: {'YES' if word_details.get('real_usage_examples') else 'NO'}"
+            
+            await status_msg.edit_text(result_text)
+            
+        except Exception as e:
+            logger.error(f"Error refreshing word {word}: {e}")
+            await status_msg.edit_text(f"❌ Error refreshing {word}: {str(e)}")
     
     # ==================== Message Handlers ====================
     
