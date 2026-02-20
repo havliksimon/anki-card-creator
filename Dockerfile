@@ -60,7 +60,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Verify installation
-RUN python3 -c "from src.services.scraper_service import ChineseScraper; print('Scraper module loads OK')"
+RUN python3 -c "from src.services.scraping_service import scraping_service; print('Scraper module loads OK')"
 
 # Expose port
 EXPOSE 8000
