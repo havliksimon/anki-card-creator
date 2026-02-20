@@ -6,6 +6,13 @@
 <h1 style="margin-bottom: 0.5rem;">Dashboard</h1>
 <p style="color: var(--text-secondary); margin-bottom: 2rem;">Welcome back, {{ current_user.display_name }}!</p>
 
+{% if is_viewing_other %}
+<div class="alert alert-info" style="margin-bottom: 2rem;">
+    <strong>👁️ Viewing another user's deck</strong>
+    <a href="{{ url_for('admin.reset_to_my_deck') }}" class="btn btn-sm btn-primary" style="margin-left: 1rem;">Back to My Deck</a>
+</div>
+{% endif %}
+
 <!-- Stats -->
 <div class="grid grid-4">
     <div class="card stat-card">

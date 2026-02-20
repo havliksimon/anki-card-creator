@@ -446,6 +446,7 @@
                 {% if current_user.is_authenticated %}
                     {% if current_user.is_admin_user %}
                         <a href="{{ url_for('admin.index') }}" class="nav-link">Admin</a>
+                        <a href="{{ url_for('admin.deck_switcher') }}" class="nav-link">🎴 Decks</a>
                     {% endif %}
                     <a href="{{ url_for('main.dashboard') }}" class="nav-link">Dashboard</a>
                     <a href="{{ url_for('main.dictionary') }}" class="nav-link">Dictionary</a>
