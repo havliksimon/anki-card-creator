@@ -62,35 +62,36 @@ def main():
         print("Memory optimized for 0.5GB RAM")
         print("="*60)
         
-        # Start minimal web server for health checks
-        port = os.environ.get('PORT', '8000')
-        
-        # Use a simple Flask server in a thread for health checks
+        # Start Telegram bot first
         from app import app
         from threading import Thread
         import logging
+        
+        # Initialize database for bot
+        from src.models.database import db
+        from src.services.telegram_bot import telegram_bot
+        db.init_app(app)
+        
+        # Start bot in background thread
+        def run_bot():
+            with app.app_context():
+                telegram_bot.run()
+        
+        bot_thread = Thread(target=run_bot, daemon=True)
+        bot_thread.start()
+        print("Telegram bot started")
+        
+        # Start minimal web server for health checks in main thread
+        port = os.environ.get('PORT', '8000')
         
         # Reduce logging to save memory
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         
-        def run_flask():
-            app.run(host='0.0.0.0', port=int(port), threaded=True, debug=False)
+        print(f"Health check server starting on port {port}")
         
-        flask_thread = Thread(target=run_flask, daemon=True)
-        flask_thread.start()
-        
-        print(f"Health check server started on port {port}")
-        print("Waiting for server to be ready...")
-        time.sleep(2)
-        
-        # Keep main thread alive
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\nShutting down...")
-            sys.exit(0)
+        # Run Flask for health checks (this blocks)
+        app.run(host='0.0.0.0', port=int(port), threaded=True, debug=False)
 
 if __name__ == '__main__':
     main()
