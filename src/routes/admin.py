@@ -29,6 +29,14 @@ def index():
     pending = db.get_pending_approvals()
     users = db.get_users()
     
+    # Ensure pending is a list
+    if not isinstance(pending, list):
+        pending = []
+    
+    # Ensure users is a list
+    if not isinstance(users, list):
+        users = []
+    
     return render_template('admin/dashboard.html',
                          stats=stats,
                          pending=pending,
@@ -148,8 +156,11 @@ def swap_to_deck():
 @admin_required
 def pending():
     """View pending approvals."""
-    pending = db.get_pending_approvals()
-    return render_template('admin/pending.html', pending=pending)
+    pending_list = db.get_pending_approvals()
+    # Ensure pending is a list
+    if not isinstance(pending_list, list):
+        pending_list = []
+    return render_template('admin/pending.html', pending=pending_list)
 
 
 @admin_bp.route('/approve/<user_id>', methods=['POST'])

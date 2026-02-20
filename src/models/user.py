@@ -89,7 +89,7 @@ class User(UserMixin):
         )
         if result and not is_admin:
             # Add to pending approvals for regular users
-            db.create_pending_approval(user_id, email, cls.hash_password(password))
+            db.create_pending_approval(user_id)
         return cls.get_by_id(user_id) if result else None
     
     @classmethod
@@ -106,8 +106,7 @@ class User(UserMixin):
             is_admin=False
         )
         if result:
-            db.create_pending_approval(user_id, email=None, password_hash=None, 
-                                        telegram_id=telegram_id, telegram_username=telegram_username)
+            db.create_pending_approval(user_id)
         return cls.get_by_id(user_id) if result else None
     
     def link_telegram(self, telegram_id: str, telegram_username: str = None) -> bool:

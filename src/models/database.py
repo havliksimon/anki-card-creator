@@ -98,12 +98,8 @@ class Database:
         # Pending approvals table
         c.execute('''
             CREATE TABLE IF NOT EXISTS pending_approvals (
-                id TEXT PRIMARY KEY,
-                email TEXT NOT NULL,
-                telegram_id TEXT,
-                telegram_username TEXT,
-                password_hash TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -381,17 +377,16 @@ class Database:
     
     # ==================== Pending Approvals ====================
     
-    def create_pending_approval(self, approval_id: str, email: str, password_hash: str,
-                                telegram_id: str = None, telegram_username: str = None) -> bool:
-        """Create a pending approval."""
+    def create_pending_approval(self, user_id: str) -> bool:
+        """Create a pending approval for a user.
+        
+        Args:
+            user_id: The user ID to add to pending approvals
+        """
         if self._client:
             data = {
-                "id": approval_id,
-                "email": email,
-                "password_hash": password_hash,
-                "telegram_id": telegram_id,
-                "telegram_username": telegram_username,
-                "created_at": datetime.utcnow().isoformat()
+                "user_id": user_id,
+                "requested_at": datetime.utcnow().isoformat()
             }
             response = self._client.post("/pending_approvals", json=data)
             return response.status_code == 201
@@ -399,56 +394,95 @@ class Database:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
             c.execute('''
-                INSERT INTO pending_approvals (id, email, password_hash, telegram_id, telegram_username)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (approval_id, email, password_hash, telegram_id, telegram_username))
+                INSERT OR REPLACE INTO pending_approvals (user_id, requested_at)
+                VALUES (?, datetime('now'))
+            ''', (user_id,))
             conn.commit()
             conn.close()
             return True
     
-    def get_pending_approval(self, approval_id: str) -> Optional[Dict]:
-        """Get a pending approval."""
+    def get_pending_approvals(self) -> List[Dict]:
+        """Get all pending approvals with user details.
+        
+        Returns list of dicts with: user_id, email, telegram_id, telegram_username, requested_at
+        """
         if self._client:
-            response = self._client.get(f"/pending_approvals?id=eq.{approval_id}&limit=1")
-            data = response.json()
-            return data[0] if data else None
+            try:
+                # Get pending approvals with user details via join
+                # Supabase doesn't support joins via REST API easily, so we fetch both and merge
+                pending_resp = self._client.get("/pending_approvals?order=requested_at.desc")
+                pending_list = pending_resp.json()
+                
+                if not isinstance(pending_list, list):
+                    return []
+                
+                # Get all users to merge data
+                users_resp = self._client.get("/users")
+                users_list = users_resp.json() if users_resp.status_code == 200 else []
+                users_dict = {u.get('id'): u for u in users_list if isinstance(u, dict)}
+                
+                # Merge pending with user data
+                result = []
+                for p in pending_list:
+                    if isinstance(p, dict) and 'user_id' in p:
+                        user = users_dict.get(p['user_id'], {})
+                        result.append({
+                            'user_id': p['user_id'],
+                            'email': user.get('email'),
+                            'telegram_id': user.get('telegram_id'),
+                            'telegram_username': user.get('telegram_username'),
+                            'requested_at': p.get('requested_at')
+                        })
+                return result
+            except Exception as e:
+                current_app.logger.error(f"Error getting pending approvals: {e}")
+                return []
         else:
+            # SQLite: join with users table
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            c.execute("SELECT * FROM pending_approvals WHERE id = ?", (approval_id,))
-            row = c.fetchone()
+            c.execute('''
+                SELECT pa.user_id, u.email, u.telegram_id, u.telegram_username, pa.requested_at
+                FROM pending_approvals pa
+                JOIN users u ON pa.user_id = u.id
+                ORDER BY pa.requested_at DESC
+            ''')
+            rows = c.fetchall()
             conn.close()
-            if row:
-                return self._row_to_dict(row, ['id', 'email', 'telegram_id', 'telegram_username', 
-                                               'password_hash', 'created_at'])
-            return None
+            return [{
+                'user_id': row[0],
+                'email': row[1],
+                'telegram_id': row[2],
+                'telegram_username': row[3],
+                'requested_at': row[4]
+            } for row in rows]
     
-    def delete_pending_approval(self, approval_id: str) -> bool:
-        """Delete a pending approval."""
+    def remove_pending_approval(self, user_id: str) -> bool:
+        """Remove a pending approval by user_id."""
         if self._client:
-            response = self._client.delete(f"/pending_approvals?id=eq.{approval_id}")
+            response = self._client.delete(f"/pending_approvals?user_id=eq.{user_id}")
             return response.status_code == 204
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            c.execute("DELETE FROM pending_approvals WHERE id = ?", (approval_id,))
+            c.execute("DELETE FROM pending_approvals WHERE user_id = ?", (user_id,))
             conn.commit()
             conn.close()
             return True
     
-    def get_all_pending_approvals(self) -> List[Dict]:
-        """Get all pending approvals."""
+    def is_pending_approval(self, user_id: str) -> bool:
+        """Check if a user has a pending approval."""
         if self._client:
-            response = self._client.get("/pending_approvals?order=created_at.desc")
-            return response.json()
+            response = self._client.get(f"/pending_approvals?user_id=eq.{user_id}&limit=1")
+            data = response.json()
+            return len(data) > 0 if isinstance(data, list) else False
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            c.execute("SELECT * FROM pending_approvals ORDER BY created_at DESC")
-            rows = c.fetchall()
+            c.execute("SELECT 1 FROM pending_approvals WHERE user_id = ?", (user_id,))
+            result = c.fetchone()
             conn.close()
-            return [self._row_to_dict(row, ['id', 'email', 'telegram_id', 'telegram_username',
-                                           'password_hash', 'created_at']) for row in rows]
+            return result is not None
     
     # ==================== Verification Tokens ====================
     
@@ -513,8 +547,17 @@ class Database:
     def get_pending_approvals(self) -> List[Dict]:
         """Get all pending approvals."""
         if self._client:
-            response = self._client.get("/pending_approvals?order=created_at.desc")
-            return response.json()
+            try:
+                response = self._client.get("/pending_approvals?order=created_at.desc")
+                data = response.json()
+                # Ensure we return a list
+                if isinstance(data, list):
+                    return data
+                # If response is dict (error), return empty list
+                return []
+            except Exception as e:
+                current_app.logger.error(f"Error getting pending approvals: {e}")
+                return []
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
@@ -542,8 +585,16 @@ class Database:
     def get_users(self) -> List[Dict]:
         """Get all users."""
         if self._client:
-            response = self._client.get("/users?order=created_at.desc")
-            return response.json()
+            try:
+                response = self._client.get("/users?order=created_at.desc")
+                data = response.json()
+                # Ensure we return a list
+                if isinstance(data, list):
+                    return data
+                return []
+            except Exception as e:
+                current_app.logger.error(f"Error getting users: {e}")
+                return []
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()

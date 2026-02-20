@@ -30,16 +30,44 @@ class DeckManager:
     def get_user_decks(self, user_id: str) -> List[Dict]:
         """Get all decks for a user."""
         if not self._client:
-            return []
+            # Fallback: return default deck
+            return [{
+                'deck_id': f'{user_id}-1',
+                'user_id': user_id,
+                'deck_number': 1,
+                'label': 'Main Deck'
+            }]
         
         try:
             response = self._client.get(
                 f"/user_decks?user_id=eq.{user_id}&order=deck_number.asc"
             )
-            return response.json()
+            data = response.json()
+            # Ensure we return a list of dicts
+            if isinstance(data, list):
+                # Validate each item is a dict
+                valid_decks = []
+                for d in data:
+                    if isinstance(d, dict) and 'deck_id' in d:
+                        valid_decks.append(d)
+                if valid_decks:
+                    return valid_decks
+            # If no valid decks found, return default
+            return [{
+                'deck_id': f'{user_id}-1',
+                'user_id': user_id,
+                'deck_number': 1,
+                'label': 'Main Deck'
+            }]
         except Exception as e:
             current_app.logger.error(f"Error getting user decks: {e}")
-            return []
+            # Return default deck on error
+            return [{
+                'deck_id': f'{user_id}-1',
+                'user_id': user_id,
+                'deck_number': 1,
+                'label': 'Main Deck'
+            }]
     
     def get_deck_id(self, user_id: str, deck_number: int) -> str:
         """Get the full deck ID (USERID-DECKNUMBER format)."""
