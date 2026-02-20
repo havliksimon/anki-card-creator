@@ -3,45 +3,45 @@
 {% block title %}Deck Switcher - Admin{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <h1 class="mb-4">🎴 Admin Deck Switcher</h1>
+<div style="max-width: 1200px; margin: 0 auto;">
+    <h1 style="margin-bottom: 1.5rem;">🎴 Admin Deck Switcher</h1>
     
-    <div class="row">
-        <div class="col-md-4">
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem;">
+        <div>
             <!-- Quick Swap Form -->
-            <div class="card mb-3">
+            <div class="card" style="margin-bottom: 1.5rem;">
                 <div class="card-header">
-                    <h5 class="mb-0">Quick Swap to Deck #</h5>
+                    <h3 class="card-title">Quick Swap to Deck #</h3>
                 </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" class="d-flex gap-2">
-                        <input type="number" name="deck_number" class="form-control" placeholder="Enter number" min="0" required>
+                <div style="padding: 1rem;">
+                    <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" style="display: flex; gap: 0.5rem;">
+                        <input type="number" name="deck_number" class="form-input" placeholder="Enter number" min="0" required style="flex: 1;">
                         <button type="submit" class="btn btn-primary">Swap</button>
                     </form>
-                    <small class="text-muted d-block mt-2">Creates new deck if doesn't exist</small>
+                    <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">Creates new deck if doesn't exist</small>
                 </div>
             </div>
             
             <!-- User Decks List -->
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">All User Decks</h5>
+                    <h3 class="card-title">All User Decks</h3>
                 </div>
-                <div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+                <div style="max-height: 500px; overflow-y: auto;">
                     <a href="{{ url_for('admin.reset_to_my_deck') }}" 
-                       class="list-group-item list-group-item-action {% if viewed_user.id == current_user.id %}active{% endif %}">
+                       style="display: block; padding: 1rem; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; {% if viewed_user.id == current_user.id %}background: var(--primary); color: white;{% endif %}">
                         <strong>👤 My Admin Deck</strong>
-                        <small class="d-block text-muted">{{ current_user.email or current_user.telegram_id }}</small>
+                        <small style="display: block; {% if viewed_user.id == current_user.id %}color: rgba(255,255,255,0.8);{% else %}color: var(--text-secondary);{% endif %}">{{ current_user.email or current_user.telegram_id }}</small>
                     </a>
                     {% for user in users %}
                         {% if user.id != current_user.id %}
                         <a href="{{ url_for('admin.switch_to_user', user_id=user.id) }}" 
-                           class="list-group-item list-group-item-action {% if viewed_user.id == user.id %}active{% endif %}">
+                           style="display: block; padding: 1rem; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; {% if viewed_user.id == user.id %}background: var(--primary); color: white;{% endif %}">
                             <strong>ID: {{ user.id }}</strong>
-                            <small class="d-block text-muted">
+                            <small style="display: block; {% if viewed_user.id == user.id %}color: rgba(255,255,255,0.8);{% else %}color: var(--text-secondary);{% endif %}">
                                 {{ user.email or user.telegram_id or 'No identifier' }}
                                 {% if user.is_admin %}
-                                    <span class="badge bg-danger">Admin</span>
+                                    <span style="background: var(--danger); color: white; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.75rem;">Admin</span>
                                 {% endif %}
                             </small>
                         </a>
@@ -51,21 +51,21 @@
             </div>
         </div>
         
-        <div class="col-md-8">
+        <div>
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 class="card-title">
                         Vocabulary Deck
                         {% if viewed_user.id != current_user.id %}
-                            <span class="text-muted">(Viewing: {{ viewed_user.id }})</span>
+                            <span style="color: var(--text-secondary); font-weight: normal;">(Viewing: {{ viewed_user.id }})</span>
                         {% endif %}
-                    </h5>
-                    <span class="badge bg-primary">{{ words|length }} words</span>
+                    </h3>
+                    <span class="badge badge-primary">{{ words|length }} words</span>
                 </div>
-                <div class="card-body">
+                <div style="padding: 1rem;">
                     {% if words %}
-                        <div class="table-responsive">
-                            <table class="table table-hover">
+                        <div style="overflow-x: auto;">
+                            <table class="table">
                                 <thead>
                                     <tr>
                                         <th>Character</th>
@@ -77,12 +77,12 @@
                                 <tbody>
                                     {% for word in words %}
                                     <tr>
-                                        <td class="fs-4">{{ word.character }}</td>
+                                        <td style="font-size: 1.5rem;">{{ word.character }}</td>
                                         <td>{{ word.pinyin|safe }}</td>
                                         <td>{{ word.translation[:50] }}{% if word.translation|length > 50 %}...{% endif %}</td>
                                         <td>
                                             <a href="{{ url_for('main.word_detail', character=word.character) }}" 
-                                               class="btn btn-sm btn-outline-primary">View</a>
+                                               class="btn btn-sm btn-secondary">View</a>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -90,7 +90,7 @@
                             </table>
                         </div>
                     {% else %}
-                        <p class="text-muted text-center">No words in this deck.</p>
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No words in this deck.</p>
                     {% endif %}
                 </div>
             </div>
