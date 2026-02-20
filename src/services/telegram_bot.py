@@ -124,7 +124,10 @@ class TelegramBotService:
         if user:
             return user, False
         
-        # Create new user (inactive, pending approval)
+        # Check if this is the admin
+        is_admin = self._is_admin(telegram_id)
+        
+        # Create new user (auto-approve if admin)
         user_id = User.generate_id()
         db.create_user(
             user_id=user_id,
@@ -132,11 +135,13 @@ class TelegramBotService:
             password_hash=None,
             telegram_id=str(telegram_id),
             telegram_username=username,
-            is_active=False,
-            is_admin=False
+            is_active=is_admin,  # Auto-activate if admin
+            is_admin=is_admin    # Set as admin if matches TELEGRAM_ADMIN_ID
         )
-        # Add to pending approvals
-        db.create_pending_approval(user_id)
+        
+        # Only add to pending if not admin
+        if not is_admin:
+            db.create_pending_approval(user_id)
         
         return db.get_user_by_id(user_id), True
     
