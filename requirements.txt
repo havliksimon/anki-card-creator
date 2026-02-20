@@ -46,9 +46,8 @@ cryptography==42.0.0
 python-slugify==8.0.3
 cachetools==5.3.2
 
-# Telegram Bot - Install separately for bot functionality
-# python-telegram-bot has conflicting dependencies with supabase
-# To run bot: pip install python-telegram-bot==21.0.1 separately
+# Telegram Bot
+python-telegram-bot==21.0.1
 
 # Development (not needed for production)
 pytest==7.4.4
