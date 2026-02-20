@@ -986,9 +986,16 @@ class TelegramBot:
         
         logger.info("Starting Telegram bot...")
         
-        # Use application.run_polling which handles event loop properly
-        # close_loop=False prevents it from closing our loop
-        self.application.run_polling(close_loop=False)
+        # Create event loop for Python 3.10+ compatibility
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        self.application.run_polling()
 
 
 # Global instance
