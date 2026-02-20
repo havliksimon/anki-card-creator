@@ -209,42 +209,69 @@ class TelegramBotService:
     # ==================== Command Handlers ====================
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command."""
+        """Handle /start command - includes Anki template setup."""
+        import os
+        
         user = update.effective_user
         user_data, is_new = self._get_or_create_user(str(user.id), user.username)
         
+        # Path to Anki template file
+        template_path = os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'anki_import.apkg')
+        
+        setup_text = (
+            "📚 *Welcome to Anki Card Creator!*\n\n"
+            "This bot creates Anki flashcards from Chinese text and images.\n\n"
+            "*Initial Setup:*\n"
+            "→ First, import the template deck below into Anki\n"
+            "→ Then send me Chinese words to add to your dictionary\n"
+            "→ Export with /export and import into the same deck\n\n"
+            "*How to import the template:*\n"
+            "📱 *Phone:* Download → Open Anki → Import → Select .apkg file\n"
+            "💻 *Computer:* Download → Open with Anki → Import"
+        )
+        
+        # Send setup text with template file
+        if os.path.exists(template_path):
+            await update.message.reply_text(setup_text, parse_mode='Markdown')
+            await update.message.reply_document(
+                document=open(template_path, 'rb'),
+                filename='First setup - Personal vocabulary.apkg',
+                caption="📥 Import this template into Anki first!"
+            )
+        else:
+            await update.message.reply_text(
+                setup_text + "\n\n⚠️ Template file not found. Please download from the website.",
+                parse_mode='Markdown'
+            )
+        
+        # Account status message
         if is_new:
-            welcome_text = (
-                f"👋 Welcome to Anki Card Creator, {user.first_name}!\n\n"
-                "This bot creates Anki flashcards from Chinese text and images.\n\n"
+            await update.message.reply_text(
                 "⚠️ Your account is pending admin approval.\n"
                 "You'll be notified once approved.\n\n"
                 "Use /help to see available commands."
             )
-            await update.message.reply_text(welcome_text)
+        elif not user_data.get('is_active'):
+            await update.message.reply_text(
+                "⏳ Your account is still pending approval.\n"
+                "Please wait for an admin to approve your account."
+            )
         else:
-            if not user_data.get('is_active'):
-                await update.message.reply_text(
-                    "⏳ Your account is still pending approval.\n"
-                    "Please wait for an admin to approve your account."
-                )
-                return
-            
-            welcome_text = (
-                f"👋 Welcome back, {user.first_name}!\n\n"
-                "This bot creates Anki flashcards from Chinese text and images.\n\n"
-                "*Quick Start:*\n"
-                "1. Send me Chinese text or images\n"
-                "2. I'll extract and enrich the words\n"
-                "3. Use /export to get your Anki CSV\n\n"
+            await update.message.reply_text(
+                "✅ Your account is active!\n\n"
+                "Send me Chinese text or images to add words to your dictionary.\n"
                 "Use /help for all commands."
             )
-            await update.message.reply_text(welcome_text, parse_mode='Markdown')
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
         help_text = (
             "📖 *Anki Card Creator - Help*\n\n"
+            "*Initial Setup:*\n"
+            "1. Use /start to get the template file\n"
+            "2. Import 'First setup - Personal vocabulary.apkg' into Anki\n"
+            "3. Send me Chinese text to add words\n"
+            "4. Export and import into the same deck\n\n"
             "*Adding Words:*\n"
             "• Send Chinese text - I'll extract all words\n"
             "• Send images - I'll use OCR to extract text\n\n"
@@ -252,15 +279,22 @@ class TelegramBotService:
             "/dictionary - View your saved words\n"
             "/dictinfo - Show statistics\n"
             "/search [word] - Search for a word\n\n"
-            "*Export:*\n"
-            "/export or /csv or /e - Export to Anki CSV\n\n"
+            "*Export to Anki:*\n"
+            "/export or /csv or /e - Get CSV file\n\n"
+            "*How to import to Anki:*\n"
+            "1. Click the CSV file\n"
+            "2. 'Open With' Anki\n"
+            "3. Set 'Field separator' to 'Comma'\n"
+            "4. Enable 'Allow HTML in fields'\n"
+            "5. Choose the 'Personal Vocabulary' note type\n"
+            "6. Select your deck and click Import 🎉\n\n"
             "*Managing Words:*\n"
             "/rmdict [number] - Remove word by index\n"
             "/rmdict [汉字] - Remove word by character\n"
             "/clearmydata - Clear all your data\n\n"
             "*Decks:*\n"
             "/list or /l - List your decks\n"
-            "/chosedict - Switch to a different deck\n\n"
+            "/chosedict [number] - Switch to a different deck\n\n"
             "*Other:*\n"
             "/changelog - See latest updates\n"
             "/help - Show this help message"

@@ -120,18 +120,23 @@ def dictionary():
                          total=total)
 
 
-@main_bp.route('/word/<character>')
+@main_bp.route('/word/<path:character>')
 @login_required
 def word_detail(character):
     """View word details."""
+    from urllib.parse import unquote
+    
     deck_id = get_current_deck_id()
+    
+    # URL decode the character (handle encoded Chinese characters)
+    decoded_character = unquote(character)
     
     # Find word in current deck
     words = db.get_words_by_user(current_user.id, deck_id)
-    word = next((w for w in words if w.get('character') == character), None)
+    word = next((w for w in words if w.get('character') == decoded_character), None)
     
     if not word:
-        flash('Word not found in current deck.', 'error')
+        flash(f'Word "{decoded_character}" not found in current deck (Deck {deck_manager.parse_deck_id(deck_id)[1]}).', 'error')
         return redirect(url_for('main.dictionary'))
     
     return render_template('word_detail.html', word=word)
