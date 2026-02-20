@@ -400,33 +400,48 @@ class TelegramBot:
         
         current_deck = self._get_current_deck_id(context, user_data)
         
+        # Build inline keyboard with clickable deck buttons
+        keyboard = []
         lines = ["📚 *Your Decks*\n"]
         
         for deck in decks:
             deck_id = deck['id']
             count = deck['word_count']
             
-            # Determine deck number for display
+            # Determine deck number for display and callback
             if deck_id == user_data['id']:
-                deck_num = "1 (Your main)"
+                deck_num = "1"
+                display_name = "1 (Your main)"
             elif deck_id.isdigit():
                 deck_num = deck_id
+                display_name = deck_id
             elif '-' in deck_id:
                 try:
                     deck_num = deck_id.rsplit('-', 1)[1]
+                    display_name = deck_num
                 except:
-                    deck_num = deck_id[:12]
+                    deck_num = deck_id
+                    display_name = deck_id[:12]
             else:
-                deck_num = deck_id[:12]
+                deck_num = deck_id
+                display_name = deck_id[:12]
             
             is_current = (deck_id == current_deck)
             marker = "🎯 " if is_current else ""
             
-            lines.append(f"{marker}Deck {deck_num}: {count} words")
+            lines.append(f"{marker}Deck {display_name}: {count} words")
+            
+            # Add clickable button for this deck
+            button_text = f"{marker}Deck {display_name} ({count} words)"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"selectdeck_{deck_num}")])
         
-        lines.append(f"\nUse `/selectdict [number]` to switch")
+        lines.append(f"\nClick a button to switch decks:")
         
-        await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
+        await update.message.reply_text(
+            "\n".join(lines), 
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     async def cmd_listall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /listall command (admin debug)."""
@@ -921,6 +936,48 @@ class TelegramBot:
         
         if data.startswith("backup_") or data in ["confirm_restore", "cancel_restore"]:
             await self._handle_backup_callback(query, data)
+        elif data.startswith("selectdeck_"):
+            # Handle deck selection from inline keyboard
+            deck_num = data.replace("selectdeck_", "")
+            user = update.effective_user
+            user_data = self._get_user_by_telegram(str(user.id))
+            
+            if not user_data or not user_data.get('is_admin'):
+                await query.edit_message_text("🚫 Admin only.")
+                return
+            
+            # Find the deck with this number
+            decks = self._get_all_decks()
+            target_deck = None
+            for deck in decks:
+                deck_id = deck['id']
+                if deck_id == user_data['id'] and deck_num == "1":
+                    target_deck = deck_id
+                    break
+                elif deck_id.isdigit() and deck_id == deck_num:
+                    target_deck = deck_id
+                    break
+                elif '-' in deck_id:
+                    try:
+                        if deck_id.rsplit('-', 1)[1] == deck_num:
+                            target_deck = deck_id
+                            break
+                    except:
+                        pass
+            
+            if not target_deck:
+                await query.edit_message_text(f"❌ Deck {deck_num} not found.")
+                return
+            
+            # Set the selected deck
+            context.user_data['admin_selected_deck'] = target_deck
+            words = db.get_words_by_user(target_deck)
+            
+            await query.edit_message_text(
+                f"✅ Switched to Deck {deck_num}\n"
+                f"Words: {len(words)}\n\n"
+                f"All commands now use this deck."
+            )
         elif data == "confirm_wipe":
             user = update.effective_user
             user_data = self._get_user_by_telegram(str(user.id))
