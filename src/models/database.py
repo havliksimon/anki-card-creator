@@ -266,34 +266,7 @@ class Database:
             user_id: The user ID
             deck_id: Optional deck ID (e.g., USERID-1, USERID-2). If None, uses user_id
         """
-        # Determine the target_id for the query
-        # Handle legacy format where deck_id might be:
-        # - user_id (Deck 1, legacy format)
-        # - user_id-N (Deck N, new format) -> need to extract N or use N directly
-        # - N (Deck N, pure numeric legacy format)
-        if deck_id:
-            # Check if deck_id is in format USERID-NUMBER
-            if '-' in deck_id:
-                parts = deck_id.rsplit('-', 1)
-                try:
-                    # If last part is a number, this is a deck identifier
-                    deck_num = int(parts[1])
-                    if deck_num == 1:
-                        # Deck 1 uses base user_id
-                        target_id = user_id
-                    else:
-                        # For other decks, try the numeric ID first (legacy format)
-                        target_id = str(deck_num)
-                except ValueError:
-                    # Not a number, use as-is
-                    target_id = deck_id
-            elif deck_id.isdigit():
-                # Pure numeric deck ID (legacy format)
-                target_id = deck_id
-            else:
-                target_id = deck_id
-        else:
-            target_id = user_id
+        target_id = self._get_target_id(user_id, deck_id)
         
         if self._client:
             response = self._client.get(f"/words?user_id=eq.{target_id}&order=created_at.desc")
@@ -371,9 +344,37 @@ class Database:
             conn.close()
             return True
     
+    def _get_target_id(self, user_id: str, deck_id: str = None) -> str:
+        """Helper to determine target user_id for a deck."""
+        if not deck_id:
+            return user_id
+        
+        # Handle deck_id format
+        if '-' in deck_id:
+            # Format: USERID-NUMBER
+            parts = deck_id.rsplit('-', 1)
+            try:
+                deck_num = int(parts[1])
+                if deck_num == 1:
+                    return user_id
+                else:
+                    return deck_id  # Keep full format for deck N > 1
+            except ValueError:
+                return deck_id
+        elif deck_id.isdigit():
+            # Pure numeric deck ID
+            deck_num = int(deck_id)
+            if deck_num == 1:
+                return user_id
+            else:
+                # For deck N > 1, use format USERID-N
+                return f"{user_id}-{deck_id}"
+        else:
+            return deck_id
+    
     def delete_word(self, word_id: int, user_id: str, deck_id: str = None) -> bool:
         """Delete a word."""
-        target_id = deck_id if deck_id else user_id
+        target_id = self._get_target_id(user_id, deck_id)
         if self._client:
             response = self._client.delete(f"/words?id=eq.{word_id}&user_id=eq.{target_id}")
             return response.status_code == 204
@@ -388,7 +389,7 @@ class Database:
     
     def delete_all_words(self, user_id: str, deck_id: str = None) -> bool:
         """Delete all words for a user/deck."""
-        target_id = deck_id if deck_id else user_id
+        target_id = self._get_target_id(user_id, deck_id)
         if self._client:
             response = self._client.delete(f"/words?user_id=eq.{target_id}")
             return response.status_code == 204
