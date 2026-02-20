@@ -293,25 +293,35 @@ class ScrapingService:
             # Memory-optimized launch args for 512MB RAM
             browser = playwright.chromium.launch(
                 headless=True,
+                # Aggressive memory limits for 512MB environment
+                handle_sigint=False,
+                handle_sigterm=False,
+                handle_sighup=False,
                 args=[
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
+                    '--disable-software-rasterizer',
                     '--single-process',  # Critical for low memory
                     '--no-zygote',  # No child processes
+                    '--no-first-run',
+                    '--no-default-browser-check',
                     '--disable-extensions',
                     '--disable-background-networking',
                     '--disable-background-timer-throttling',
                     '--disable-backgrounding-occluded-windows',
                     '--disable-breakpad',
                     '--disable-component-extensions-with-background-pages',
-                    '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                    '--disable-features=TranslateUI,BlinkGenPropertyTrees,IsolateOrigins,site-per-process',
                     '--disable-ipc-flooding-protection',
                     '--disable-renderer-backgrounding',
                     '--force-color-profile=srgb',
-                    '--max_old_space_size=128',  # Limit JS heap
-                    '--js-flags=--max-old-space-size=128'
+                    '--memory-model=low',
+                    '--max_old_space_size=64',  # Very small JS heap (64MB)
+                    '--js-flags=--max-old-space-size=64,--jitless',
+                    '--disable-javascript-harmony-shipping',
+                    '--disable-site-isolation-trials'
                 ]
             )
             return playwright, browser
@@ -391,6 +401,7 @@ class ScrapingService:
         
         playwright = None
         browser = None
+        context = None
         page = None
         meanings_list = []
         stroke_order_urls = []
@@ -401,17 +412,23 @@ class ScrapingService:
                 print("Browser not initialized")
                 return "", []
             
-            page = browser.new_page()
-            # Reduced timeout since we're on limited resources
-            page.set_default_timeout(45000)
+            # Create context with minimal memory usage
+            context = browser.new_context(
+                viewport={'width': 800, 'height': 600},
+                java_script_enabled=True,
+            )
+            page = context.new_page()
+            
+            # Very short timeout for 512MB environment
+            page.set_default_timeout(30000)
             
             # Go to Written Chinese dictionary
-            page.goto('https://dictionary.writtenchinese.com', wait_until='domcontentloaded')
+            page.goto('https://dictionary.writtenchinese.com', wait_until='domcontentloaded', timeout=30000)
             
             # Search for the character
             page.fill('#searchKey', character)
             page.press('#searchKey', 'Enter')
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(1000)  # Reduced wait
             
             # Look for "Learn more" link
             links = page.query_selector_all('a.learn-more-link')
@@ -427,8 +444,8 @@ class ScrapingService:
                 return "", []
             
             # Navigate to word detail page
-            page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded')
-            page.wait_for_timeout(1500)
+            page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded', timeout=30000)
+            page.wait_for_timeout(1000)  # Reduced wait
             
             # Extract stroke order GIFs from symbol-layer
             try:
@@ -485,9 +502,9 @@ class ScrapingService:
             print(f"WrittenChinese scraping failed: {e}")
         finally:
             # CRITICAL: Close everything to free memory for 512MB environment
-            if page:
+            if context:
                 try:
-                    page.close()
+                    context.close()
                 except:
                     pass
             if browser:
