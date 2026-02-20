@@ -267,12 +267,12 @@ class DictionaryService:
         
         return ''.join(formatted)
     
-    def generate_csv(self, user_id: str) -> bytes:
+    def generate_csv(self, user_id: str, deck_id: str = None) -> bytes:
         """Generate CSV export for user's words."""
         import csv
         import io
         
-        words = db.get_words_by_user(user_id)
+        words = db.get_words_by_user(user_id, deck_id)
         
         output = io.StringIO()
         writer = csv.writer(output)
@@ -307,6 +307,49 @@ class DictionaryService:
             ] + stroke_fields)
         
         return output.getvalue().encode('utf-8')
+    
+    def generate_anki_preview(self, word: Dict) -> str:
+        """Generate HTML preview of Anki card."""
+        character = word.get('character', '')
+        pinyin = word.get('pinyin', '')
+        translation = word.get('translation', '')
+        meaning = word.get('meaning', '')
+        exemplary_image = word.get('exemplary_image', '')
+        pronunciation = word.get('pronunciation', '')
+        anki_examples = word.get('anki_usage_examples', '')
+        stroke_gifs = word.get('stroke_gifs', '').split(', ') if word.get('stroke_gifs') else []
+        
+        html = f'''
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+            <!-- Front of card -->
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h2 style="font-size: 48px; margin: 0; text-align: center;">{character}</h2>
+                <div style="text-align: center; margin-top: 10px;">
+                    <button onclick="document.getElementById('preview-audio').play()" 
+                        style="padding: 10px 20px; font-size: 18px; cursor: pointer;">🔊 Play Audio</button>
+                    <audio id="preview-audio" src="{pronunciation}" preload="auto"></audio>
+                </div>
+            </div>
+            
+            <!-- Back of card -->
+            <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+                <div style="font-size: 24px; color: #666; margin-bottom: 10px;">{pinyin}</div>
+                <div style="font-size: 18px; margin-bottom: 15px;"><strong>{translation}</strong></div>
+                
+                {f'<div style="margin: 15px 0;"><img src="{exemplary_image}" style="max-width: 100%; border-radius: 8px;"></div>' if exemplary_image else ''}
+                
+                <div style="margin-top: 20px;">
+                    <h4>Example Usage:</h4>
+                    <div style="background: #f9f9f9; padding: 15px; border-radius: 4px;">
+                        {anki_examples}
+                    </div>
+                </div>
+                
+                {f'<div style="margin-top: 15px;"><h4>Stroke Order:</h4><div style="display: flex; gap: 10px; flex-wrap: wrap;">' + ''.join([f'<img src="{gif}" style="width: 100px; height: 100px; border: 1px solid #ddd;">' for gif in stroke_gifs if gif]) + '</div></div>' if stroke_gifs else ''}
+            </div>
+        </div>
+        '''
+        return html
 
 
 # Global instance

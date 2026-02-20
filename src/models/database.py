@@ -249,15 +249,23 @@ class Database:
     
     # ==================== Words ====================
     
-    def get_words_by_user(self, user_id: str) -> List[Dict]:
-        """Get all words for a user."""
+    def get_words_by_user(self, user_id: str, deck_id: str = None) -> List[Dict]:
+        """Get all words for a user/deck.
+        
+        Args:
+            user_id: The user ID
+            deck_id: Optional deck ID (e.g., USERID-1, USERID-2). If None, uses user_id
+        """
+        # Use deck_id if provided, otherwise fall back to user_id
+        target_id = deck_id if deck_id else user_id
+        
         if self._client:
-            response = self._client.get(f"/words?user_id=eq.{user_id}&order=created_at.desc")
+            response = self._client.get(f"/words?user_id=eq.{target_id}&order=created_at.desc")
             return response.json()
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            c.execute("SELECT * FROM words WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+            c.execute("SELECT * FROM words WHERE user_id = ? ORDER BY created_at DESC", (target_id,))
             rows = c.fetchall()
             conn.close()
             return [self._row_to_dict(row, ['id', 'character', 'user_id', 'pinyin', 'translation', 
@@ -310,19 +318,34 @@ class Database:
             conn.close()
             return word_id
     
-    def delete_word(self, word_id: int, user_id: str) -> bool:
+    def delete_word(self, word_id: int, user_id: str, deck_id: str = None) -> bool:
         """Delete a word."""
+        target_id = deck_id if deck_id else user_id
         if self._client:
-            response = self._client.delete(f"/words?id=eq.{word_id}&user_id=eq.{user_id}")
+            response = self._client.delete(f"/words?id=eq.{word_id}&user_id=eq.{target_id}")
             return response.status_code == 204
         else:
             conn = sqlite3.connect(self._local_db_path)
             c = conn.cursor()
-            c.execute("DELETE FROM words WHERE id = ? AND user_id = ?", (word_id, user_id))
+            c.execute("DELETE FROM words WHERE id = ? AND user_id = ?", (word_id, target_id))
             conn.commit()
             deleted = c.rowcount > 0
             conn.close()
             return deleted
+    
+    def delete_all_words(self, user_id: str, deck_id: str = None) -> bool:
+        """Delete all words for a user/deck."""
+        target_id = deck_id if deck_id else user_id
+        if self._client:
+            response = self._client.delete(f"/words?user_id=eq.{target_id}")
+            return response.status_code == 204
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("DELETE FROM words WHERE user_id = ?", (target_id,))
+            conn.commit()
+            conn.close()
+            return True
     
     # ==================== Example Sentences ====================
     
@@ -543,8 +566,9 @@ class Database:
                 users = self._client.get("/users?select=id").json()
                 words = self._client.get("/words?select=id").json()
                 return {
-                    "users": len(users),
-                    "words": len(words),
+                    "total_users": len(users),
+                    "total_words": len(words),
+                    "active_users": len(users),  # Approximation
                     "mode": "supabase"
                 }
             except:
@@ -558,8 +582,9 @@ class Database:
             word_count = c.fetchone()[0]
             conn.close()
             return {
-                "users": user_count,
-                "words": word_count,
+                "total_users": user_count,
+                "total_words": word_count,
+                "active_users": user_count,
                 "mode": "sqlite"
             }
 

@@ -1,10 +1,11 @@
 """Main application routes."""
 import io
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, current_app, session
 from flask_login import login_required, current_user
 
 from src.models.database import db
 from src.models.user import User
+from src.models.deck_manager import deck_manager
 from src.services.dictionary_service import dictionary_service
 from src.utils.chinese_utils import (
     extract_chinese_words, chinese_to_styled_pinyin,
@@ -12,6 +13,13 @@ from src.utils.chinese_utils import (
 )
 
 main_bp = Blueprint('main', __name__)
+
+
+def get_current_deck_id():
+    """Get current deck ID for the logged-in user."""
+    if not current_user.is_authenticated:
+        return None
+    return deck_manager.get_current_deck_id(current_user.id)
 
 
 @main_bp.route('/')
@@ -26,38 +34,56 @@ def index():
 @login_required
 def dashboard():
     """User dashboard."""
-    # Check if admin has switched to another user's deck
-    from flask import session
-    from src.models.user import User
+    deck_id = get_current_deck_id()
     
-    viewed_user_id = session.get('viewed_user_id')
-    if viewed_user_id and current_user.is_admin_user and viewed_user_id != current_user.id:
-        viewed_user = User.get_by_id(viewed_user_id)
-        if viewed_user:
-            words = viewed_user.get_words()
-            stats = viewed_user.get_stats()
-            is_viewing_other = True
-        else:
-            words = current_user.get_words()
-            stats = current_user.get_stats()
-            is_viewing_other = False
-    else:
-        words = current_user.get_words()
-        stats = current_user.get_stats()
-        is_viewing_other = False
+    # Get words for current deck
+    words = db.get_words_by_user(current_user.id, deck_id)
     
-    # Calculate progress
-    char_count = stats.get('total_words', 0)
+    # Get deck info
+    decks = deck_manager.get_user_decks(current_user.id)
+    current_deck_num = deck_manager.parse_deck_id(deck_id)[1]
+    current_deck_label = next((d.get('label', f'Deck {current_deck_num}') for d in decks if d.get('deck_id') == deck_id), f'Deck {current_deck_num}')
+    
+    # Calculate stats
+    char_count = len(words)
     coverage = get_coverage_percentage(char_count)
     hsk_progress = get_hsk_progress(char_count)
     
     return render_template('dashboard.html', 
-                         words=words[:10],  # Show recent 10
-                         stats=stats,
+                         words=words[:10],
+                         deck_id=deck_id,
+                         deck_label=current_deck_label,
+                         deck_number=current_deck_num,
+                         decks=decks,
                          coverage=coverage,
                          hsk_progress=hsk_progress,
-                         total_count=len(words),
-                         is_viewing_other=is_viewing_other)
+                         total_count=len(words))
+
+
+@main_bp.route('/switch-deck/<int:deck_number>', methods=['POST'])
+@login_required
+def switch_deck(deck_number):
+    """Switch to a different deck."""
+    deck_manager.swap_to_deck(current_user.id, deck_number)
+    flash(f'Switched to Deck {deck_number}', 'success')
+    return redirect(url_for('main.dashboard'))
+
+
+@main_bp.route('/create-deck', methods=['POST'])
+@login_required
+def create_deck():
+    """Create a new deck."""
+    deck_number = request.form.get('deck_number', type=int)
+    label = request.form.get('label', '').strip()
+    
+    if not deck_number or deck_number < 1:
+        flash('Invalid deck number', 'error')
+        return redirect(url_for('main.dashboard'))
+    
+    deck_manager.create_deck(current_user.id, deck_number, label)
+    deck_manager.set_current_deck(current_user.id, deck_number)
+    flash(f'Created and switched to Deck {deck_number}', 'success')
+    return redirect(url_for('main.dashboard'))
 
 
 @main_bp.route('/dictionary')
@@ -67,7 +93,8 @@ def dictionary():
     page = request.args.get('page', 1, type=int)
     per_page = 50
     
-    words = current_user.get_words()
+    deck_id = get_current_deck_id()
+    words = db.get_words_by_user(current_user.id, deck_id)
     total = len(words)
     
     # Pagination
@@ -77,8 +104,17 @@ def dictionary():
     
     total_pages = (total + per_page - 1) // per_page
     
+    # Get deck info
+    decks = deck_manager.get_user_decks(current_user.id)
+    current_deck_num = deck_manager.parse_deck_id(deck_id)[1]
+    current_deck_label = next((d.get('label', f'Deck {current_deck_num}') for d in decks if d.get('deck_id') == deck_id), f'Deck {current_deck_num}')
+    
     return render_template('dictionary.html',
                          words=paginated_words,
+                         deck_id=deck_id,
+                         deck_label=current_deck_label,
+                         deck_number=current_deck_num,
+                         decks=decks,
                          page=page,
                          total_pages=total_pages,
                          total=total)
@@ -88,10 +124,14 @@ def dictionary():
 @login_required
 def word_detail(character):
     """View word details."""
-    word = db.get_word(character, current_user.id)
+    deck_id = get_current_deck_id()
+    
+    # Find word in current deck
+    words = db.get_words_by_user(current_user.id, deck_id)
+    word = next((w for w in words if w.get('character') == character), None)
     
     if not word:
-        flash('Word not found.', 'error')
+        flash('Word not found in current deck.', 'error')
         return redirect(url_for('main.dictionary'))
     
     return render_template('word_detail.html', word=word)
@@ -115,12 +155,14 @@ def add_word():
             flash('No Chinese characters found.', 'error')
             return redirect(url_for('main.add_word'))
         
+        deck_id = get_current_deck_id()
         added = []
         existing = []
         
         for word_text in chinese_words:
-            # Check if word already exists
-            existing_word = db.get_word(word_text, current_user.id)
+            # Check if word already exists in current deck
+            words_in_deck = db.get_words_by_user(current_user.id, deck_id)
+            existing_word = next((w for w in words_in_deck if w.get('character') == word_text), None)
             
             if existing_word:
                 existing.append(word_text)
@@ -129,7 +171,7 @@ def add_word():
             # Get word details
             try:
                 word_details = dictionary_service.get_word_details(word_text)
-                word_details['user_id'] = current_user.id
+                word_details['user_id'] = deck_id  # Store with deck_id
                 db.create_word(word_details)
                 added.append(word_text)
             except Exception as e:
@@ -146,46 +188,62 @@ def add_word():
     return render_template('add_word.html')
 
 
-@main_bp.route('/delete-word/<character>', methods=['POST'])
+@main_bp.route('/delete-word/<int:word_id>', methods=['POST'])
 @login_required
-def delete_word(character):
+def delete_word(word_id):
     """Delete a word."""
-    db.delete_word(character, current_user.id)
-    flash(f'Deleted: {character}', 'success')
+    deck_id = get_current_deck_id()
+    db.delete_word(word_id, current_user.id, deck_id)
+    flash('Word deleted', 'success')
     return redirect(url_for('main.dictionary'))
 
 
 @main_bp.route('/clear-all', methods=['POST'])
 @login_required
 def clear_all():
-    """Clear all words."""
-    db.delete_all_words(current_user.id)
-    flash('All words have been cleared.', 'success')
+    """Clear all words in current deck."""
+    deck_id = get_current_deck_id()
+    db.delete_all_words(current_user.id, deck_id)
+    flash('All words in current deck have been cleared.', 'success')
     return redirect(url_for('main.dictionary'))
 
 
 @main_bp.route('/export')
 @login_required
 def export_csv():
-    """Export words to CSV."""
-    # Check if admin has switched to another user's deck
-    from flask import session
-    from src.models.user import User
+    """Export words from current deck to CSV."""
+    deck_id = get_current_deck_id()
+    csv_data = dictionary_service.generate_csv(current_user.id, deck_id)
     
-    viewed_user_id = session.get('viewed_user_id')
-    if viewed_user_id and current_user.is_admin_user and viewed_user_id != current_user.id:
-        export_user_id = viewed_user_id
-    else:
-        export_user_id = current_user.id
-    
-    csv_data = dictionary_service.generate_csv(export_user_id)
+    # Parse deck number for filename
+    _, deck_num = deck_manager.parse_deck_id(deck_id)
     
     return send_file(
         io.BytesIO(csv_data),
         mimetype='text/csv',
         as_attachment=True,
-        download_name='anki_export.csv'
+        download_name=f'anki_deck_{deck_num}.csv'
     )
+
+
+@main_bp.route('/preview-anki/<character>')
+@login_required
+def preview_anki(character):
+    """Preview Anki card for a word."""
+    deck_id = get_current_deck_id()
+    words = db.get_words_by_user(current_user.id, deck_id)
+    word = next((w for w in words if w.get('character') == character), None)
+    
+    if not word:
+        return jsonify({'error': 'Word not found'}), 404
+    
+    # Generate Anki card HTML preview
+    preview_html = dictionary_service.generate_anki_preview(word)
+    
+    return jsonify({
+        'word': word,
+        'preview_html': preview_html
+    })
 
 
 @main_bp.route('/api/tts/<text>')
@@ -230,4 +288,5 @@ def help_page():
 def profile():
     """User profile."""
     stats = current_user.get_stats()
-    return render_template('profile.html', stats=stats)
+    decks = deck_manager.get_user_decks(current_user.id)
+    return render_template('profile.html', stats=stats, decks=decks)

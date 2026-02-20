@@ -4,20 +4,11 @@
 
 {% block content %}
 <div class="container py-4">
-    <h1 class="mb-4">🎴 Deck Switcher</h1>
-    
-    {% if viewed_user.id != current_user.id %}
-    <div class="alert alert-info">
-        <strong>Viewing deck for:</strong> 
-        {{ viewed_user.display_name }} (ID: {{ viewed_user.id }})
-        <a href="{{ url_for('admin.reset_to_my_deck') }}" class="btn btn-sm btn-outline-primary ms-3">
-            ↩ Back to My Deck
-        </a>
-    </div>
-    {% endif %}
+    <h1 class="mb-4">🎴 Admin Deck Switcher</h1>
     
     <div class="row">
         <div class="col-md-4">
+            <!-- Quick Swap Form -->
             <div class="card mb-3">
                 <div class="card-header">
                     <h5 class="mb-0">Quick Swap to Deck #</h5>
@@ -31,14 +22,15 @@
                 </div>
             </div>
             
+            <!-- User Decks List -->
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Select User Deck</h5>
+                    <h5 class="mb-0">All User Decks</h5>
                 </div>
                 <div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
                     <a href="{{ url_for('admin.reset_to_my_deck') }}" 
                        class="list-group-item list-group-item-action {% if viewed_user.id == current_user.id %}active{% endif %}">
-                        <strong>👤 My Deck</strong>
+                        <strong>👤 My Admin Deck</strong>
                         <small class="d-block text-muted">{{ current_user.email or current_user.telegram_id }}</small>
                     </a>
                     {% for user in users %}
