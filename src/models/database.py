@@ -306,12 +306,18 @@ class Database:
         logger = logging.getLogger(__name__)
         
         if self._client:
-            logger.info(f"create_word: creating word '{word_data.get('character')}' for user_id={word_data.get('user_id', '')[:20]}...")
+            user_id = word_data.get('user_id', '')
+            logger.info(f"create_word: creating word '{word_data.get('character')}' for user_id={user_id[:20]}...")
+            
+            # Auto-create deck user if needed (for deck N > 1)
+            if '-' in user_id:
+                self._ensure_deck_user_exists(user_id)
+            
             response = self._client.post("/words", json=word_data)
             logger.info(f"create_word: response status={response.status_code}")
             if response.status_code == 201:
                 # Get the created word ID
-                result = self._client.get(f"/words?character=eq.{word_data['character']}&user_id=eq.{word_data['user_id']}&limit=1")
+                result = self._client.get(f"/words?character=eq.{word_data['character']}&user_id=eq.{user_id}&limit=1")
                 data = result.json()
                 word_id = data[0]['id'] if data else None
                 logger.info(f"create_word: success, word_id={word_id}")
@@ -353,33 +359,56 @@ class Database:
             conn.close()
             return True
     
+    def _ensure_deck_user_exists(self, deck_user_id: str) -> bool:
+        """Ensure a deck user exists in the users table (for FK constraint)."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Check if user exists
+            response = self._client.get(f"/users?id=eq.{deck_user_id}&limit=1")
+            if response.json():
+                return True  # User exists
+            
+            # Create the deck user
+            logger.info(f"Creating deck user: {deck_user_id}")
+            user_data = {
+                'id': deck_user_id,
+                'email': None,
+                'telegram_id': None,
+                'is_active': True,  # Deck users are always active
+                'is_admin': False
+            }
+            response = self._client.post("/users", json=user_data)
+            success = response.status_code == 201
+            if success:
+                logger.info(f"Created deck user: {deck_user_id}")
+            else:
+                logger.error(f"Failed to create deck user: {response.status_code} - {response.text[:200]}")
+            return success
+        except Exception as e:
+            logger.error(f"Error ensuring deck user exists: {e}")
+            return False
+    
     def _get_target_id(self, user_id: str, deck_id: str = None) -> str:
-        """Helper to determine target user_id for a deck."""
-        if not deck_id:
+        """Helper to determine target user_id for a deck.
+        
+        IMPORTANT: Deck user_ids must exist in users table due to FK constraint.
+        Deck 1 uses the base user_id.
+        Deck N > 1 uses format "{base_user_id}-{N}" and we auto-create these users.
+        """
+        if not deck_id or deck_id == "1":
             return user_id
         
-        # Handle deck_id format
-        if '-' in deck_id:
-            # Format: USERID-NUMBER
-            parts = deck_id.rsplit('-', 1)
-            try:
-                deck_num = int(parts[1])
-                if deck_num == 1:
-                    return user_id
-                else:
-                    return deck_id  # Keep full format for deck N > 1
-            except ValueError:
-                return deck_id
-        elif deck_id.isdigit():
-            # Pure numeric deck ID
-            deck_num = int(deck_id)
-            if deck_num == 1:
-                return user_id
-            else:
-                # For deck N > 1, use format USERID-N
-                return f"{user_id}-{deck_id}"
-        else:
+        # For deck N > 1, use format USERID-N
+        # This user will be auto-created if it doesn't exist
+        if deck_id.isdigit():
+            return f"{user_id}-{deck_id}"
+        elif '-' in deck_id:
+            # Already in format USERID-N
             return deck_id
+        else:
+            return f"{user_id}-{deck_id}"
     
     def delete_word(self, word_id: int, user_id: str, deck_id: str = None) -> bool:
         """Delete a word."""

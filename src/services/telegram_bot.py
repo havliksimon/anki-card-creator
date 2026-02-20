@@ -452,7 +452,7 @@ class TelegramBotService:
         base_user_id = user_data['id']
         
         # Construct the target user_id for this deck
-        target_user_id = f"{base_user_id}-{current_deck}" if current_deck and current_deck != "1" else base_user_id
+        target_user_id = db._get_target_id(base_user_id, current_deck)
         
         stats = db.get_user_stats(target_user_id)
         words = db.get_words_by_user(base_user_id, current_deck)
@@ -493,7 +493,7 @@ class TelegramBotService:
             return
         
         # Generate CSV with proper deck identification
-        target_user_id = f"{base_user_id}-{current_deck}" if current_deck and current_deck != "1" else base_user_id
+        target_user_id = db._get_target_id(base_user_id, current_deck)
         csv_data = self._export_to_csv(target_user_id)
         
         deck_name = f"_{current_deck}" if current_deck else ""
@@ -767,7 +767,7 @@ class TelegramBotService:
             return
         
         # Get the actual user_id format used in database for this deck
-        target_user_id = f"{base_user_id}-{current_deck}" if current_deck and current_deck != "1" else base_user_id
+        target_user_id = db._get_target_id(base_user_id, current_deck)
         
         target = args[0]
         
@@ -1193,10 +1193,7 @@ class TelegramBotService:
                 source_word = global_words[word_text]
                 # Copy word details and update user_id to current deck
                 # user_id format: base_user_id for deck 1, base_user_id-N for deck N (N>1)
-                if current_deck and current_deck != "1":
-                    target_user_id = f"{base_user_id}-{current_deck}"
-                else:
-                    target_user_id = base_user_id
+                target_user_id = db._get_target_id(base_user_id, current_deck)
                 
                 logger.info(f"Copying word '{word_text}' to deck {current_deck} with user_id={target_user_id[:20]}...")
                 
@@ -1251,10 +1248,7 @@ class TelegramBotService:
                 
                 word_details = dictionary_service.get_word_details(word_text, progress_callback)
                 # user_id format: base_user_id for deck 1, base_user_id-N for deck N (N>1)
-                if current_deck and current_deck != "1":
-                    target_user_id = f"{base_user_id}-{current_deck}"
-                else:
-                    target_user_id = base_user_id
+                target_user_id = db._get_target_id(base_user_id, current_deck)
                 word_details['user_id'] = target_user_id  # Use proper deck user_id format
                 db.create_word(word_details)
                 added.append(word_text)
@@ -1341,15 +1335,20 @@ class TelegramBotService:
         
         elif data.startswith("switch_deck_"):
             full_deck_id = data.replace("switch_deck_", "")
+            user_data = self._get_user_by_telegram(str(user.id))
+            base_user_id = user_data['id'] if user_data else ""
+            
             # Extract deck number from full ID (format: USERID-N or just USERID for deck 1)
-            if '-' in full_deck_id:
+            if full_deck_id == base_user_id:
+                deck_num = "1"  # Main deck
+            elif '-' in full_deck_id:
                 deck_num = full_deck_id.rsplit('-', 1)[1]
             else:
-                deck_num = "1"  # Main deck has no suffix
+                deck_num = "1"
             context.user_data['current_deck'] = deck_num
             
             # Get word count for this deck
-            words = db.get_words_by_user(full_deck_id)
+            words = db.get_words_by_user(base_user_id, deck_num)
             count = len(words)
             
             await query.edit_message_text(
