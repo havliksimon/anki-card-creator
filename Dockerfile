@@ -40,8 +40,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (system-wide, before creating user)
-RUN python3 -m playwright install chromium --with-deps
+# Install Playwright browsers to a system-wide location
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN mkdir -p /opt/playwright-browsers && \
+    python3 -m playwright install chromium --with-deps && \
+    chmod -R 755 /opt/playwright-browsers
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser
@@ -52,6 +55,9 @@ RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
+
+# Set the browsers path for appuser too
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 # Verify installation
 RUN python3 -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); b.close(); print('Playwright OK')"
