@@ -18,11 +18,24 @@
     
     <div class="row">
         <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Quick Swap to Deck #</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.swap_to_deck') }}" class="d-flex gap-2">
+                        <input type="number" name="deck_number" class="form-control" placeholder="Enter number" min="0" required>
+                        <button type="submit" class="btn btn-primary">Swap</button>
+                    </form>
+                    <small class="text-muted d-block mt-2">Creates new deck if doesn't exist</small>
+                </div>
+            </div>
+            
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">Select User Deck</h5>
                 </div>
-                <div class="list-group list-group-flush" style="max-height: 600px; overflow-y: auto;">
+                <div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
                     <a href="{{ url_for('admin.reset_to_my_deck') }}" 
                        class="list-group-item list-group-item-action {% if viewed_user.id == current_user.id %}active{% endif %}">
                         <strong>👤 My Deck</strong>

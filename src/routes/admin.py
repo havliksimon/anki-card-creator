@@ -99,6 +99,50 @@ def reset_to_my_deck():
     return redirect(url_for('admin.deck_switcher'))
 
 
+@admin_bp.route('/swap-to-deck', methods=['POST'])
+@login_required
+@admin_required
+def swap_to_deck():
+    """Swap to a deck by number - creates if doesn't exist."""
+    deck_number = request.form.get('deck_number', '').strip()
+    
+    if not deck_number:
+        flash('Please enter a deck number', 'error')
+        return redirect(url_for('admin.deck_switcher'))
+    
+    # Validate it's a positive integer
+    try:
+        deck_num = int(deck_number)
+        if deck_num < 0:
+            raise ValueError()
+    except ValueError:
+        flash('Deck number must be a positive integer', 'error')
+        return redirect(url_for('admin.deck_switcher'))
+    
+    deck_id = str(deck_num)
+    
+    # Check if user exists
+    existing_user = db.get_user_by_id(deck_id)
+    
+    if not existing_user:
+        # Create a new placeholder user for this deck
+        db.create_user(
+            user_id=deck_id,
+            email=None,
+            password_hash=None,
+            telegram_id=deck_id,
+            telegram_username=f"deck_{deck_id}",
+            is_active=True,
+            is_admin=False
+        )
+        flash(f"Created and switched to new deck: {deck_id}", 'success')
+    else:
+        flash(f"Switched to deck: {deck_id}", 'info')
+    
+    session['viewed_user_id'] = deck_id
+    return redirect(url_for('admin.deck_switcher'))
+
+
 @admin_bp.route('/pending')
 @login_required
 @admin_required

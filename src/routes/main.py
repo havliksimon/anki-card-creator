@@ -168,7 +168,17 @@ def clear_all():
 @login_required
 def export_csv():
     """Export words to CSV."""
-    csv_data = dictionary_service.generate_csv(current_user.id)
+    # Check if admin has switched to another user's deck
+    from flask import session
+    from src.models.user import User
+    
+    viewed_user_id = session.get('viewed_user_id')
+    if viewed_user_id and current_user.is_admin_user and viewed_user_id != current_user.id:
+        export_user_id = viewed_user_id
+    else:
+        export_user_id = current_user.id
+    
+    csv_data = dictionary_service.generate_csv(export_user_id)
     
     return send_file(
         io.BytesIO(csv_data),

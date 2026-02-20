@@ -12,6 +12,7 @@ from gtts import gTTS
 
 from src.models.database import db
 from src.utils.chinese_utils import chinese_to_styled_pinyin
+from src.services.r2_storage import r2_storage
 
 
 class DictionaryService:
@@ -133,15 +134,22 @@ class DictionaryService:
         return None
     
     def _get_pronunciation_url(self, text: str) -> str:
-        """Get pronunciation audio URL or generate local."""
+        """Get pronunciation audio URL - optimized for R2 storage."""
+        # Priority 1: Check if file exists in R2 and return direct URL
+        if r2_storage.is_available():
+            r2_url = r2_storage.get_tts_url(text)
+            if r2_url:
+                return r2_url
+        
+        # Priority 2: Use configured TTS API URL
         if self.tts_api_url:
             return f"{self.tts_api_url}?hanzi={quote(text)}"
         
-        # Generate and cache locally
+        # Priority 3: Generate and return local URL
         return self._generate_tts_audio(text)
     
     def _generate_tts_audio(self, text: str) -> str:
-        """Generate TTS audio and return local URL."""
+        """Generate TTS audio and return URL."""
         # Check cache first
         cached = self._get_cached_tts(text)
         if cached:
@@ -153,7 +161,13 @@ class DictionaryService:
             tts.write_to_fp(audio_buffer)
             audio_data = audio_buffer.getvalue()
             
-            # Cache the audio
+            # Store in R2 for optimized delivery
+            if r2_storage.is_available():
+                r2_url = r2_storage.store_tts(text, audio_data)
+                if r2_url:
+                    return r2_url
+            
+            # Fallback: Cache locally and return local URL
             self._cache_tts(text, audio_data)
             return f"/api/tts/{text}"
         except Exception as e:
