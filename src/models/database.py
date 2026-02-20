@@ -310,10 +310,9 @@ class Database:
             user_id = word_data.get('user_id', '')
             logger.info(f"create_word: creating word '{word_data.get('character')}' for user_id={user_id[:20]}...")
             
-            # Auto-create deck user if needed (for deck N > 1)
-            # Both numeric ("2") and format ("USERID-2") need user records
-            if user_id != word_data.get('_original_user_id', user_id):
-                self._ensure_deck_user_exists(user_id)
+            # ALWAYS ensure deck user exists before creating word
+            # This handles both numeric decks ("2", "3", etc.) and UUID-based decks
+            self._ensure_deck_user_exists(user_id)
             
             response = self._client.post("/words", json=word_data)
             logger.info(f"create_word: response status={response.status_code}")
@@ -368,21 +367,24 @@ class Database:
         
         try:
             # Check if user exists
+            logger.info(f"_ensure_deck_user_exists: checking if {deck_user_id[:20]}... exists")
             response = self._client.get(f"/users?id=eq.{deck_user_id}&limit=1")
-            if response.json():
+            existing = response.json()
+            logger.info(f"_ensure_deck_user_exists: found existing={len(existing) if existing else 0}")
+            
+            if existing:
                 return True  # User exists
             
             # Create the deck user
             logger.info(f"Creating deck user: {deck_user_id}")
             user_data = {
                 'id': deck_user_id,
-                'email': None,
-                'telegram_id': None,
                 'is_active': True,  # Deck users are always active
                 'is_admin': False
             }
             response = self._client.post("/users", json=user_data)
             success = response.status_code == 201
+            logger.info(f"Create deck user result: status={response.status_code}, success={success}")
             if success:
                 logger.info(f"Created deck user: {deck_user_id}")
             else:
