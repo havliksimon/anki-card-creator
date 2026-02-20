@@ -24,7 +24,7 @@
                     <a href="{{ url_for('main.word_detail', character=word.character) }}" style="text-decoration: none; color: inherit; font-size: 1.5rem;">
                         {{ word.character }}
                     </a>
-                    <form method="POST" action="{{ url_for('main.delete_word', character=word.character) }}" 
+                    <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
                           onsubmit="return confirm('Delete {{ word.character }}?');" style="margin: 0;">
                         <button type="submit" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.25rem; font-size: 1rem;">×</button>
                     </form>

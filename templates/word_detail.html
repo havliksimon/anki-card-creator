@@ -16,7 +16,7 @@
                 </button>
                 <audio id="audio-main" src="{{ word.pronunciation }}"></audio>
             {% endif %}
-            <form method="POST" action="{{ url_for('main.delete_word', character=word.character) }}" 
+            <form method="POST" action="{{ url_for('main.delete_word', word_id=word.id) }}" 
                   onsubmit="return confirm('Delete this word?');">
                 <button type="submit" class="btn btn-danger">Delete</button>
             </form>
