@@ -3,7 +3,6 @@ import os
 import sqlite3
 import httpx
 from typing import Optional, List, Dict, Any
-from flask import current_app
 import json
 from datetime import datetime
 
@@ -568,6 +567,7 @@ class Database:
                         })
                 return result
             except Exception as e:
+                from flask import current_app
                 current_app.logger.error(f"Error getting pending approvals: {e}")
                 return []
         else:
@@ -689,6 +689,7 @@ class Database:
                 # If response is dict (error), return empty list
                 return []
             except Exception as e:
+                from flask import current_app
                 current_app.logger.error(f"Error getting pending approvals: {e}")
                 return []
         else:
@@ -726,6 +727,7 @@ class Database:
                     return data
                 return []
             except Exception as e:
+                from flask import current_app
                 current_app.logger.error(f"Error getting users: {e}")
                 return []
         else:

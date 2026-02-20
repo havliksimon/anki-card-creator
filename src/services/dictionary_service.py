@@ -7,12 +7,17 @@ import threading
 from typing import Optional, List, Dict, Any, Tuple
 from io import BytesIO
 from urllib.parse import quote
-from gtts import gTTS
 
 from src.models.database import db
 from src.utils.chinese_utils import chinese_to_styled_pinyin
 from src.services.r2_storage import r2_storage
 from src.services.scraping_service import scraping_service
+
+
+def _get_gtts():
+    """Lazy load gTTS to save memory at startup."""
+    from gtts import gTTS
+    return gTTS
 
 
 class DictionaryService:
