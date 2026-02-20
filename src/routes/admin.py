@@ -156,7 +156,7 @@ def stats():
     
     for user_data in all_users:
         user = User(user_data)
-        word_count = db.get_user_stats(user.id).get('total_words', 0)
+        word_count = db.get_user_stats(user.id).get('word_count', 0)
         users_data.append({
             'user': user,
             'word_count': word_count

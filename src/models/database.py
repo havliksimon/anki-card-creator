@@ -485,6 +485,51 @@ class Database:
             conn.close()
             return True
     
+    # ==================== Pending Approvals ====================
+    
+    def get_pending_approvals(self) -> List[Dict]:
+        """Get all pending approvals."""
+        if self._client:
+            response = self._client.get("/pending_approvals?order=created_at.desc")
+            return response.json()
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("SELECT * FROM pending_approvals ORDER BY created_at DESC")
+            rows = c.fetchall()
+            conn.close()
+            return [self._row_to_dict(row, ['id', 'email', 'telegram_id', 'telegram_username',
+                                           'password_hash', 'created_at']) for row in rows]
+    
+    def remove_pending_approval(self, approval_id: str) -> bool:
+        """Remove a pending approval."""
+        if self._client:
+            response = self._client.delete(f"/pending_approvals?id=eq.{approval_id}")
+            return response.status_code == 204
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("DELETE FROM pending_approvals WHERE id = ?", (approval_id,))
+            conn.commit()
+            conn.close()
+            return True
+    
+    # ==================== Users Admin ====================
+    
+    def get_users(self) -> List[Dict]:
+        """Get all users."""
+        if self._client:
+            response = self._client.get("/users?order=created_at.desc")
+            return response.json()
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("SELECT * FROM users ORDER BY created_at DESC")
+            rows = c.fetchall()
+            conn.close()
+            return [self._row_to_dict(row, ['id', 'email', 'telegram_id', 'telegram_username',
+                                           'password_hash', 'is_active', 'is_admin', 'created_at', 'last_login']) for row in rows]
+    
     # ==================== Helper ====================
     
     def _row_to_dict(self, row: tuple, columns: List[str]) -> Dict:
