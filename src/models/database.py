@@ -310,7 +310,8 @@ class Database:
             logger.info(f"create_word: creating word '{word_data.get('character')}' for user_id={user_id[:20]}...")
             
             # Auto-create deck user if needed (for deck N > 1)
-            if '-' in user_id:
+            # Both numeric ("2") and format ("USERID-2") need user records
+            if user_id != word_data.get('_original_user_id', user_id):
                 self._ensure_deck_user_exists(user_id)
             
             response = self._client.post("/words", json=word_data)
@@ -390,25 +391,58 @@ class Database:
             logger.error(f"Error ensuring deck user exists: {e}")
             return False
     
+    def _get_existing_deck_format(self, user_id: str, deck_num: str) -> str:
+        """Detect the format used by an existing deck (numeric or USERID-N)."""
+        if deck_num == "1":
+            return user_id
+        
+        # Check if deck exists with numeric format (legacy)
+        try:
+            response = self._client.get(f"/words?user_id=eq.{deck_num}&limit=1")
+            if response.json():
+                return deck_num  # Legacy numeric format
+        except:
+            pass
+        
+        # Check if deck exists with USERID-N format (new)
+        new_format = f"{user_id}-{deck_num}"
+        try:
+            response = self._client.get(f"/words?user_id=eq.{new_format}&limit=1")
+            if response.json():
+                return new_format  # New format
+        except:
+            pass
+        
+        # Default: use numeric format for legacy compatibility
+        return deck_num
+    
     def _get_target_id(self, user_id: str, deck_id: str = None) -> str:
         """Helper to determine target user_id for a deck.
         
-        IMPORTANT: Deck user_ids must exist in users table due to FK constraint.
-        Deck 1 uses the base user_id.
-        Deck N > 1 uses format "{base_user_id}-{N}" and we auto-create these users.
+        Supports both legacy numeric format ("2", "3", etc.) and new format ("USERID-2").
         """
         if not deck_id or deck_id == "1":
             return user_id
         
-        # For deck N > 1, use format USERID-N
-        # This user will be auto-created if it doesn't exist
+        # Extract deck number
         if deck_id.isdigit():
-            return f"{user_id}-{deck_id}"
+            deck_num = deck_id
         elif '-' in deck_id:
-            # Already in format USERID-N
-            return deck_id
+            # Extract number from USERID-N format
+            try:
+                deck_num = deck_id.rsplit('-', 1)[1]
+                if not deck_num.isdigit():
+                    return deck_id  # Not a valid deck number
+            except (ValueError, IndexError):
+                return deck_id
         else:
             return f"{user_id}-{deck_id}"
+        
+        # Check if this deck already exists with a specific format
+        existing_format = self._get_existing_deck_format(user_id, deck_num)
+        
+        # Return the detected format (or numeric if new deck)
+        return existing_format
     
     def delete_word(self, word_id: int, user_id: str, deck_id: str = None) -> bool:
         """Delete a word."""

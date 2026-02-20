@@ -674,17 +674,26 @@ class TelegramBotService:
             return
         
         base_user_id = user_data['id']
+        is_admin = user_data.get('is_admin', False)
         
-        # Get all decks and filter to only this user's decks
+        # Get all decks
         all_decks = self._get_all_decks()
         
         # Filter decks that belong to this user:
         # - Main deck: deck_id == base_user_id
-        # - Other decks: deck_id starts with "base_user_id-"
+        # - New format decks: deck_id starts with "base_user_id-"
+        # - Legacy numeric decks: for admin, include all numeric deck IDs
         user_decks = []
         for deck in all_decks:
             deck_id = deck['id']
-            if deck_id == base_user_id or deck_id.startswith(f"{base_user_id}-"):
+            if deck_id == base_user_id:
+                # Main deck
+                user_decks.append(deck)
+            elif deck_id.startswith(f"{base_user_id}-"):
+                # New format deck
+                user_decks.append(deck)
+            elif deck_id.isdigit() and is_admin:
+                # Legacy numeric deck - admin sees all numeric decks
                 user_decks.append(deck)
         
         if not user_decks:
@@ -706,9 +715,15 @@ class TelegramBotService:
             # Extract deck number from full ID for display
             if deck_id == base_user_id:
                 deck_num = "1"  # Main deck
+            elif deck_id.isdigit():
+                # Legacy numeric format (e.g., "2", "3", "11")
+                deck_num = deck_id
             elif '-' in deck_id:
-                # Extract number from end (format: USERID-N)
-                deck_num = deck_id.rsplit('-', 1)[1]
+                # New format: extract number from end (format: USERID-N)
+                try:
+                    deck_num = deck_id.rsplit('-', 1)[1]
+                except (ValueError, IndexError):
+                    deck_num = "?"
             else:
                 deck_num = "?"
             
@@ -1335,20 +1350,30 @@ class TelegramBotService:
         
         elif data.startswith("switch_deck_"):
             full_deck_id = data.replace("switch_deck_", "")
-            user_data = self._get_user_by_telegram(str(user.id))
-            base_user_id = user_data['id'] if user_data else ""
+            user_data_switch = self._get_user_by_telegram(str(user.id))
+            base_user_id_switch = user_data_switch['id'] if user_data_switch else ""
+            is_admin_switch = user_data_switch.get('is_admin', False) if user_data_switch else False
             
-            # Extract deck number from full ID (format: USERID-N or just USERID for deck 1)
-            if full_deck_id == base_user_id:
-                deck_num = "1"  # Main deck
+            # Extract deck number from full ID
+            if full_deck_id == base_user_id_switch:
+                # Main deck (base user_id)
+                deck_num = "1"
+            elif full_deck_id.isdigit():
+                # Legacy numeric format (e.g., "2", "3", "11")
+                deck_num = full_deck_id
             elif '-' in full_deck_id:
-                deck_num = full_deck_id.rsplit('-', 1)[1]
+                # New format: USERID-N
+                try:
+                    deck_num = full_deck_id.rsplit('-', 1)[1]
+                except (ValueError, IndexError):
+                    deck_num = "1"
             else:
                 deck_num = "1"
+            
             context.user_data['current_deck'] = deck_num
             
             # Get word count for this deck
-            words = db.get_words_by_user(base_user_id, deck_num)
+            words = db.get_words_by_user(base_user_id_switch, deck_num)
             count = len(words)
             
             await query.edit_message_text(
