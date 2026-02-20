@@ -1,4 +1,4 @@
-"""Web scraping service using Selenium - exact copy from old app."""
+"""Web scraping service using Selenium - EXACT copy from old app."""
 import os
 import re
 import urllib.parse
@@ -17,6 +17,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+import requests
 
 # Tone colors mapping (same as old app)
 tone_colors = {
@@ -42,19 +43,47 @@ def get_tone_number(syllable):
     return 0  # Neutral tone/unknown
 
 
+def chinese_to_styled_texts(chinese_str):
+    """Convert Chinese to styled pinyin and hanzi - EXACT from old app."""
+    pinyin_list = []
+    char_list = []
+    
+    for char in chinese_str:
+        # Get pinyin for character
+        try:
+            import pypinyin
+            py = pypinyin.pinyin(char, style=pypinyin.Style.TONE)[0][0]
+        except:
+            py = char
+        
+        tone = get_tone_number(py)
+        color = tone_colors.get(tone, 'var(--regular-text)')
+        
+        styled_py = f'<span style="color:{color}">{py}</span>'
+        styled_char = f'<span style="color:{color}">{char}</span>'
+        
+        pinyin_list.append(styled_py)
+        char_list.append(styled_char)
+    
+    return ' '.join(pinyin_list), ''.join(char_list)
+
+
 def style_scraped_pinyin(pinyin_str, word_str):
-    """Style scraped pinyin with colors - exact copy from old app."""
+    """Style scraped pinyin with colors - EXACT copy from old app."""
     styled_syllables = []
-    syllables = pinyin_str
+    syllables = pinyin_str if isinstance(pinyin_str, list) else [pinyin_str]
     word_syllables = [char for char in word_str]
     styled_word_syllables = []
+    
     for i in range(len(syllables)):
         tone = get_tone_number(syllables[i])
         color = tone_colors.get(tone, '')
         styled = f'<span style="color:{color}">{syllables[i]}</span>'
         styled_syllables.append(styled)
-        styled = f'<span style="color:{color}">{word_syllables[i]}</span>'
-        styled_word_syllables.append(styled)
+        if i < len(word_syllables):
+            styled = f'<span style="color:{color}">{word_syllables[i]}</span>'
+            styled_word_syllables.append(styled)
+    
     return ' '.join(styled_syllables), ''.join(styled_word_syllables)
 
 
@@ -125,14 +154,13 @@ def convert_hanzi_to_styled(hanzi_html):
 def cache_audio(audio_url):
     """Trigger API call to cache audio."""
     try:
-        import requests
         requests.get(audio_url, timeout=5)
     except Exception as e:
         print(f"Error caching audio: {e}")
 
 
 class ScrapingService:
-    """Web scraping service using Selenium - exact copy from old app."""
+    """Web scraping service using Selenium - EXACT copy from old app."""
     
     def __init__(self):
         self.driver = None
@@ -171,7 +199,7 @@ class ScrapingService:
         return self.driver is not None
     
     def scrape_chinese_sentences(self, word: str) -> List[Dict]:
-        """Scrape example sentences from ChineseBoost."""
+        """Scrape example sentences from ChineseBoost - EXACT from old app."""
         if not self._ensure_driver():
             return []
         
@@ -193,7 +221,7 @@ class ScrapingService:
         return data
     
     def _process_page(self, data: List[Dict]):
-        """Process a page of ChineseBoost results."""
+        """Process a page of ChineseBoost results - EXACT from old app."""
         try:
             cards = self.driver.find_elements(By.CSS_SELECTOR, 'div.card')
             
@@ -238,7 +266,7 @@ class ScrapingService:
             print(f"Error processing page: {e}")
     
     def _navigate_to_next_page(self) -> bool:
-        """Navigate to next page of results."""
+        """Navigate to next page of results - EXACT from old app."""
         try:
             pagination = self.driver.find_element(By.CSS_SELECTOR, 'ul.pagination')
             next_buttons = pagination.find_elements(By.CSS_SELECTOR, 'li.page-item a[rel="next"]')
@@ -253,7 +281,7 @@ class ScrapingService:
         return False
     
     def scrape_mdbg(self, character: str) -> List[Dict]:
-        """Scrape word details from MDBG dictionary."""
+        """Scrape word details from MDBG dictionary - EXACT from old app."""
         if not self._ensure_driver():
             return []
         
@@ -284,25 +312,6 @@ class ScrapingService:
                     audio_url = f"{tts_api_url}?hanzi={quote(term)}"
                     threading.Thread(target=cache_audio, args=(audio_url,)).start()
                     
-                    # Stroke order extraction
-                    stroke_gifs = []
-                    try:
-                        stroke_link = entry.find_element(By.CSS_SELECTOR, "img[src*='brush2.png']").find_element(By.XPATH, "..").get_attribute("href")
-                        original_window = self.driver.current_window_handle
-                        self.driver.switch_to.new_window('tab')
-                        self.driver.get(stroke_link)
-                        WebDriverWait(self.driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, "img[src*='gif.php']")))
-                        gifs = [img.get_attribute("src") for img in self.driver.find_elements(By.CSS_SELECTOR, "img[src*='gif.php']")]
-                        stroke_gifs = gifs[:6]  # Limit to first 6 strokes
-                        self.driver.close()
-                        self.driver.switch_to.window(original_window)
-                    except Exception as e:
-                        stroke_gifs = []
-                        if len(self.driver.window_handles) > 1:
-                            self.driver.switch_to.window(self.driver.window_handles[1])
-                            self.driver.close()
-                            self.driver.switch_to.window(original_window)
-                    
                     # Traditional character
                     traditional = ""
                     try:
@@ -317,7 +326,7 @@ class ScrapingService:
                         'definition': definition,
                         'example_link': "",
                         'audio_url': audio_url,
-                        'stroke_order': ", ".join(stroke_gifs) if stroke_gifs else "",
+                        'stroke_order': "",  # Will be filled from writtenchinese
                         'traditional': traditional
                     })
                 except Exception as e:
@@ -328,19 +337,125 @@ class ScrapingService:
         
         return results
     
+    def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
+        """
+        Scrape stroke order and meaning from WrittenChinese - EXACT from old app.
+        Returns: (meaning, stroke_order_urls)
+        """
+        if not self._ensure_driver():
+            return "", []
+        
+        meanings_list = []
+        stroke_order_urls = []
+        random_fix = False
+        
+        try:
+            self.driver.get("https://dictionary.writtenchinese.com")
+            input_element = self.wait.until(EC.presence_of_element_located((By.ID, 'searchKey')))
+            input_element.send_keys(character)
+            input_element.send_keys(Keys.ENTER)
+            
+            learn_more_link = self.wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//a[@class='cstm learnmore learn-more-link']/span[text()='Learn more']")
+            ))
+            learn_more_link.click()
+            
+            self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.symbol-layer img")))
+            
+            # Get meanings for multi-character words
+            if len(str(character)) > 1:
+                try:
+                    character_table = self.driver.find_element(By.CSS_SELECTOR, "table.with-flex")
+                    rows = character_table.find_elements(By.TAG_NAME, "tr")[1:]
+                    
+                    for row in rows:
+                        try:
+                            char_cell = row.find_element(By.CSS_SELECTOR, "td.smbl-cstm-wrp.word")
+                            char = char_cell.find_element(By.TAG_NAME, "span").text
+                            
+                            pinyin_cell = row.find_element(By.CSS_SELECTOR, "td.pinyin")
+                            pinyin = pinyin_cell.find_element(By.TAG_NAME, "a").text
+                            
+                            meaning_cell = row.find_element(By.CSS_SELECTOR, "td.txt-cell")
+                            meaning = meaning_cell.text
+                            
+                            print(f"Character: {char} ({pinyin}) - Meaning: {meaning}")
+                            styled_pinyin, styled_char = chinese_to_styled_texts(char)
+                            entry = f"🔂 {styled_char} ({styled_pinyin}): {meaning}"
+                            if entry not in meanings_list and not random_fix:
+                                meanings_list.append(entry)
+                        except:
+                            continue
+                except Exception as e:
+                    print(f"Error getting meanings table: {e}")
+            
+            # Get stroke order GIFs
+            gif_elements = self.driver.find_elements(By.CSS_SELECTOR, "div.symbol-layer img")
+            stroke_order_urls = [
+                gif_src.get_attribute("src") for gif_src in gif_elements
+                if gif_src.get_attribute("src") and "giffile.action" in gif_src.get_attribute("src")
+            ]
+            print(f"Stroke order URLs: {stroke_order_urls}")
+            
+        except Exception as e:
+            print(f"WrittenChinese scraping failed (trying fallback): {e}")
+            
+            # Fallback: scrape each character individually
+            for single_character in character:
+                try:
+                    self.driver.get("https://dictionary.writtenchinese.com")
+                    input_element = self.wait.until(EC.presence_of_element_located((By.ID, 'searchKey')))
+                    input_element.send_keys(single_character)
+                    input_element.send_keys(Keys.ENTER)
+                    
+                    learn_more_link = self.wait.until(EC.element_to_be_clickable(
+                        (By.XPATH, "//a[@class='cstm learnmore learn-more-link']/span[text()='Learn more']")
+                    ))
+                    learn_more_link.click()
+                    
+                    self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.symbol-layer img")))
+                    gif_elements = self.driver.find_elements(By.CSS_SELECTOR, "div.symbol-layer img")
+                    urls = [
+                        gif.get_attribute("src") for gif in gif_elements
+                        if gif.get_attribute("src") and "giffile.action" in gif.get_attribute("src")
+                    ]
+                    if urls:
+                        stroke_order_urls.append(urls[0])  # Take first GIF for each char
+                    
+                    # Get meaning for single character
+                    if len(str(character)) > 1:
+                        try:
+                            definition_element = self.wait.until(
+                                EC.presence_of_element_located((By.XPATH, "(//td[@class='txt-cell'])[1]"))
+                            )
+                            meaning = definition_element.text
+                            pinyin, styled_char = chinese_to_styled_texts(single_character)
+                            entry = f"🔂 {styled_char} ({pinyin}): {meaning}"
+                            if entry not in meanings_list and not random_fix:
+                                meanings_list.append(entry)
+                        except:
+                            pass
+                except Exception as e2:
+                    print(f"Fallback scraping failed for {single_character}: {e2}")
+        
+        # Build meaning string
+        meaning = " ".join(meanings_list) if meanings_list else ""
+        
+        return meaning, stroke_order_urls
+    
     def scrape_word_details(self, character: str) -> Tuple:
         """
-        Scrape complete word details - exact copy from old app.
+        Scrape complete word details - EXACT copy from old app.
         Returns: (pinyin, definition, stroke_gifs, pronunciation, example_link, 
                   exemplary_image, meaning, reading, component1, component2, 
                   styled_term, usage_examples, real_usage_examples)
         """
         if not self._ensure_driver():
-            # Return empty data if driver not available
-            return ("", "", "", "", "", "", "", "", "", "", "", "[]", "[]")
+            return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
         
         app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
         tts_api_url = f"{app_url}/api/tts"
+        unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
         
         try:
             # Get example sentences from ChineseBoost
@@ -373,7 +488,12 @@ class ScrapingService:
             results = self.scrape_mdbg(character)
             
             if not results:
-                return ("", "", "", "", "", "", "", "", "", "", "", "[]", "[]")
+                return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
+            
+            # Get stroke order and meaning from WrittenChinese
+            meaning, stroke_urls = self.scrape_writtenchinese(character)
+            if stroke_urls:
+                results[0]['stroke_order'] = ", ".join(stroke_urls)
             
             # Prioritize exact match
             try:
@@ -398,8 +518,27 @@ class ScrapingService:
             except Exception as e:
                 print(f"Error reordering results: {e}")
             
-            # Build meaning from character breakdown
-            meaning = ""
+            # Get exemplary_image from Unsplash
+            exemplary_image = ""
+            if unsplash_api_key:
+                try:
+                    url = 'https://api.unsplash.com/search/photos'
+                    params = {
+                        'query': character,
+                        'page': 1,
+                        'per_page': 1,
+                        'order_by': 'relevant',
+                        'client_id': unsplash_api_key
+                    }
+                    response = requests.get(url, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['results']:
+                            exemplary_image = data['results'][0]['urls']['regular']
+                except Exception as e:
+                    print(f"Error getting Unsplash image: {e}")
+            
+            results[0]['exemplary_image'] = exemplary_image
             
             # component1 placeholder (same as old app)
             component1 = 'Developer Note: "Reading" card type is still work in progress (will be fixed by standard importing of cards in the near future)'
@@ -423,28 +562,6 @@ class ScrapingService:
             
             real_usage_examples_str = ''.join(real_usage_examples)
             
-            # Get exemplary_image from Unsplash
-            exemplary_image = ""
-            unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
-            if unsplash_api_key:
-                try:
-                    import requests
-                    url = 'https://api.unsplash.com/search/photos'
-                    params = {
-                        'query': character,
-                        'page': 1,
-                        'per_page': 1,
-                        'order_by': 'relevant',
-                        'client_id': unsplash_api_key
-                    }
-                    response = requests.get(url, params=params, timeout=10)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data['results']:
-                            exemplary_image = data['results'][0]['urls']['regular']
-                except Exception as e:
-                    print(f"Error getting Unsplash image: {e}")
-            
             # Return format matches old app exactly
             return (
                 results[0]["pinyin"],           # 0: pinyin
@@ -452,7 +569,7 @@ class ScrapingService:
                 results[0]["stroke_order"],      # 2: stroke_order (stroke_gifs)
                 results[0]["audio_url"],         # 3: audio_url (pronunciation)
                 results[0]['example_link'],      # 4: example_link
-                exemplary_image,                 # 5: exemplary_image
+                results[0]['exemplary_image'],   # 5: exemplary_image
                 meaning,                         # 6: meaning
                 reading,                         # 7: reading
                 component1,                      # 8: component1
@@ -465,7 +582,7 @@ class ScrapingService:
         except Exception as e:
             print(f"Error in scrape_word_details: {e}")
             traceback.print_exc()
-            return ("", "", "", "", "", "", "", "", "", "", "", "[]", "[]")
+            return ("", "", "", "", "", "", "", "", "", "", "", "[]", "")
     
     def close(self):
         """Close the WebDriver."""
