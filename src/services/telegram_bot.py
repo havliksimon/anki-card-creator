@@ -123,6 +123,12 @@ class TelegramBotService:
         """Get existing user or create new one. Returns (user_data, is_new)."""
         user = self._get_user_by_telegram(telegram_id)
         if user:
+            # Check if this user should be admin (matches TELEGRAM_ADMIN_ID)
+            should_be_admin = self._is_admin(telegram_id)
+            # Update admin status if needed
+            if should_be_admin and not user.get('is_admin'):
+                db.update_user(user['id'], {'is_admin': True, 'is_active': True})
+                user = self._get_user_by_telegram(telegram_id)
             return user, False
         
         # Check if this is the admin

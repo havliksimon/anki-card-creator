@@ -18,8 +18,23 @@ def main():
         print("STARTING: Full Web Mode")
         print("="*60)
         print("Web interface: ENABLED")
-        print("Telegram bot: Will start alongside web server")
+        print("Telegram bot: ENABLED")
         print("="*60)
+        
+        # Start Telegram bot in a separate thread
+        from threading import Thread
+        from app import app
+        
+        # Initialize database for bot
+        with app.app_context():
+            from src.services.telegram_bot import telegram_bot
+            
+            def run_bot():
+                telegram_bot.run()
+            
+            bot_thread = Thread(target=run_bot, daemon=True)
+            bot_thread.start()
+            print("Telegram bot started in background")
         
         # Start gunicorn for web server
         port = os.environ.get('PORT', '8000')
