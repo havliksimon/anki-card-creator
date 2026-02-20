@@ -1,4 +1,4 @@
-"""Dictionary service for scraping and managing Chinese words."""
+"""Dictionary service for word details - uses scraping exactly like old app."""
 import os
 import re
 import json
@@ -7,185 +7,64 @@ import threading
 from typing import Optional, List, Dict, Any, Tuple
 from io import BytesIO
 from urllib.parse import quote
-from bs4 import BeautifulSoup
 from gtts import gTTS
 
 from src.models.database import db
 from src.utils.chinese_utils import chinese_to_styled_pinyin
 from src.services.r2_storage import r2_storage
+from src.services.scraping_service import scraping_service
 
 
 class DictionaryService:
-    """Service for Chinese dictionary operations."""
+    """Service for Chinese dictionary operations - uses scraping like old app."""
     
     def __init__(self):
-        self.deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY')
-        self.unsplash_api_key = os.environ.get('UNSPLASH_API_KEY')
-        # Use the app's own TTS API
         self.app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
         self.tts_api_url = f"{self.app_url}/api/tts"
     
     def get_word_details(self, character: str) -> Dict[str, Any]:
-        """Get full word details from scraping and APIs."""
-        # Get styled pinyin and hanzi
-        styled_pinyin, styled_term = chinese_to_styled_pinyin(character)
+        """Get full word details using web scraping (exactly like old app)."""
+        # Use the scraping service exactly like the old app
+        scraped_data = scraping_service.scrape_word_details(character)
         
-        # Get example sentences from DeepSeek
-        examples = self._get_ai_examples(character)
+        # Unpack the returned tuple (same order as old app)
+        pinyin, translation, stroke_gifs, pronunciation, example_link, \
+        exemplary_image, meaning, reading, component1, component2, \
+        styled_term, usage_examples, real_usage_examples = scraped_data
         
-        # Get image from Unsplash
-        image_url = self._get_unsplash_image(character)
+        # If styled_term is empty, generate it
+        if not styled_term:
+            _, styled_term = chinese_to_styled_pinyin(character)
         
-        # Generate pronunciation audio - use R2 if available, otherwise local API
-        pronunciation = self._get_pronunciation_url(character)
-        
-        # Get stroke order GIFs
-        stroke_gifs = self._get_stroke_gifs(character)
-        
-        # Format example sentences for Anki
-        anki_examples = self._format_anki_examples(examples, character)
-        
-        # Format real usage examples (same as anki_examples for now)
-        real_usage_examples = anki_examples
+        # If pinyin is empty, generate it
+        if not pinyin:
+            pinyin, _ = chinese_to_styled_pinyin(character)
         
         return {
             'character': character,
-            'pinyin': styled_pinyin,
+            'pinyin': pinyin,
             'styled_term': styled_term,
-            'translation': self._get_translation(character),
-            'meaning': '',
-            'stroke_gifs': ', '.join(stroke_gifs) if stroke_gifs else '',
-            'pronunciation': pronunciation,
-            'exemplary_image': image_url,
-            'anki_usage_examples': anki_examples,
+            'translation': translation or self._get_translation(character),
+            'meaning': meaning,
+            'stroke_gifs': stroke_gifs,
+            'pronunciation': pronunciation or self._get_pronunciation_url(character),
+            'exemplary_image': exemplary_image,
+            'anki_usage_examples': real_usage_examples,  # Use real examples as anki examples
             'real_usage_examples': real_usage_examples,
-            'usage_examples': json.dumps(examples) if examples else '[]'
+            'usage_examples': usage_examples,
+            'reading': reading,
+            'component1': component1,
+            'component2': component2,
+            'example_link': example_link
         }
-    
-    def _get_ai_examples(self, character: str) -> List[Dict[str, str]]:
-        """Get AI-generated example sentences from DeepSeek."""
-        if not self.deepseek_api_key:
-            return []
-        
-        url = "https://api.deepseek.com/v1/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.deepseek_api_key}"
-        }
-        prompt = f"""Please provide three exemplary Chinese sentences using the word "{character}". 
-        Ensure that the vocabulary used in these sentences is at the same or a lower HSK level than "{character}". 
-        For each Chinese sentence, provide its Pinyin on the next line starting with "Pinyin: ", 
-        and its English translation on the following line starting with "Translation: ". 
-        Return the result as a JSON array where each element is an object with "chinese", "pinyin", and "english" keys."""
-        
-        data = {
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
-            "n": 1
-        }
-        
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            json_response = response.json()
-            
-            if 'choices' in json_response and len(json_response['choices']) > 0:
-                content = json_response['choices'][0]['message']['content']
-                
-                # Extract JSON from content
-                json_start = content.find('[')
-                json_end = content.rfind(']')
-                
-                if json_start != -1 and json_end != -1 and json_start < json_end:
-                    content = content[json_start:json_end + 1]
-                
-                results = json.loads(content)
-                
-                # Style the pinyin for each example
-                for item in results:
-                    if 'chinese' in item:
-                        styled_pinyin, styled_chinese = chinese_to_styled_pinyin(item['chinese'])
-                        item['pinyin'] = styled_pinyin
-                        item['chinese'] = styled_chinese
-                        # Generate audio URL for this sentence
-                        item['audio_url'] = self._get_pronunciation_url(item.get('chinese', '').replace('<span style="color:', '').replace('">', '').replace('</span>', ''))
-                
-                return results
-        except Exception as e:
-            print(f"Error getting AI examples: {e}")
-        
-        return []
-    
-    def _get_unsplash_image(self, query: str) -> Optional[str]:
-        """Get image from Unsplash."""
-        if not self.unsplash_api_key:
-            return None
-        
-        try:
-            url = 'https://api.unsplash.com/search/photos'
-            params = {
-                'query': query,
-                'page': 1,
-                'per_page': 1,
-                'order_by': 'relevant',
-                'client_id': self.unsplash_api_key
-            }
-            response = requests.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data['results']:
-                    return data['results'][0]['urls']['regular']
-        except Exception as e:
-            print(f"Error getting Unsplash image: {e}")
-        
-        return None
     
     def _get_pronunciation_url(self, text: str) -> str:
-        """Get pronunciation audio URL - uses the app's own TTS API."""
-        # Use the app's own TTS API URL format (same as old app but with new domain)
+        """Get pronunciation audio URL."""
         return f"{self.tts_api_url}?hanzi={quote(text)}"
-    
-    def _get_stroke_gifs(self, character: str) -> List[str]:
-        """Get stroke order GIFs for character."""
-        # Return URLs to writtenchinese stroke order GIFs
-        gifs = []
-        for char in character:
-            encoded = quote(char)
-            url = f"https://dictionary.writtenchinese.com/giffile.action?&localfile=true&fileName={encoded}.gif"
-            gifs.append(url)
-        return gifs
     
     def _get_translation(self, character: str) -> str:
         """Get English translation for character."""
-        # This would require a dictionary API
-        # For now, return placeholder
         return "Translation not available"
-    
-    def _format_anki_examples(self, examples: List[Dict[str, str]], main_character: str = None) -> str:
-        """Format examples for Anki card - matches old app format exactly."""
-        if not examples:
-            return ""
-        
-        formatted = []
-        for idx, example in enumerate(examples, 1):
-            # Get plain text for audio (remove HTML tags)
-            chinese_plain = example.get('chinese', '').replace('<span style="color:', '').replace('">', '').replace('</span>', '')
-            audio_url = example.get('audio_url') or self._get_pronunciation_url(chinese_plain)
-            
-            html = f'''<div style="margin-bottom: 20px;">
-<div style="font-size: 20px; font-weight: bold;">{example.get('chinese', '')}</div>
-<div style="font-size: 18px; display: inline-block;">
-<span style="font-size: 20px; font-weight: bold;">{example.get('pinyin', '')} </span>
-</div>
-<button id="button{idx}" onclick="document.getElementById('audio{idx}').play()" 
-    style="padding: 5px 10px; background: var(--button-bg); color: var(--button-text); 
-    font-size: 16px; cursor: pointer; vertical-align: middle;">▶</button>
-<audio id="audio{idx}" src="{audio_url}" preload="auto"></audio>
-<div style="font-size: 16px; margin-top: 10px;">{example.get('english', '')}</div>
-</div>'''
-            formatted.append(html)
-        
-        return ''.join(formatted)
     
     def generate_csv(self, user_id: str, deck_id: str = None) -> bytes:
         """Generate CSV export for user's words - matches old app format EXACTLY."""
@@ -205,18 +84,16 @@ class DictionaryService:
             translation = word.get('translation', '')
             meaning = word.get('meaning', '')
             
-            # Ensure pronunciation uses new API URL
+            # Ensure pronunciation uses correct API URL
             pronunciation = word.get('pronunciation', '')
-            if '212.227.211.88' in pronunciation:
-                # Convert old URL to new
-                hanzi = character
-                pronunciation = self._get_pronunciation_url(hanzi)
+            if not pronunciation or '212.227.211.88' in pronunciation:
+                pronunciation = self._get_pronunciation_url(character)
             
             example_link = word.get('example_link', '')
             exemplary_image = word.get('exemplary_image', '')
             
-            # Use anki_usage_examples if available, otherwise use real_usage_examples
-            example_usage = word.get('anki_usage_examples', '') or word.get('real_usage_examples', '')
+            # Use real_usage_examples as example_usage (same as old app)
+            example_usage = word.get('real_usage_examples', '') or word.get('anki_usage_examples', '')
             
             reading = word.get('reading', '')
             component1 = word.get('component1', '')
@@ -231,9 +108,7 @@ class DictionaryService:
             # Pad to ensure all 6 columns are present
             stroke_order_fields += [''] * (6 - len(stroke_order_fields))
             
-            # CSV row format: Hanzi, StyledTerm, Pinyin, Translation, Meaning, Pronunciation, 
-            #                 ExampleLink, ExemplaryImage, ExampleUsage, Reading, Component1, Component2, 
-            #                 RealUsageExamples, StrokeOrder1-6
+            # CSV row format matches old app exactly
             csv_row = [
                 character,
                 styled_term,
@@ -264,11 +139,11 @@ class DictionaryService:
         pronunciation = word.get('pronunciation', '')
         
         # Fix pronunciation URL if needed
-        if '212.227.211.88' in pronunciation:
+        if not pronunciation or '212.227.211.88' in pronunciation:
             pronunciation = self._get_pronunciation_url(character)
         
-        # Use anki_usage_examples or real_usage_examples
-        anki_examples = word.get('anki_usage_examples', '') or word.get('real_usage_examples', '')
+        # Use real_usage_examples for display
+        anki_examples = word.get('real_usage_examples', '') or word.get('anki_usage_examples', '')
         
         stroke_gifs = word.get('stroke_gifs', '').split(', ') if word.get('stroke_gifs') else []
         

@@ -9,6 +9,7 @@ from src.models.database import db
 from src.models.user import User
 from src.models.deck_manager import deck_manager
 from src.services.dictionary_service import dictionary_service
+from src.services.scraping_service import scraping_service
 from src.utils.chinese_utils import (
     extract_chinese_words, chinese_to_styled_pinyin,
     get_coverage_percentage, get_hsk_progress
