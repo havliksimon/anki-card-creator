@@ -6,24 +6,43 @@ import threading
 import traceback
 import json
 import time
-import asyncio
-import concurrent.futures
-import gc  # Garbage collection for memory optimization
+import gc
 from typing import List, Dict, Tuple, Optional
 from bs4 import BeautifulSoup
 
 import requests
 from urllib.parse import quote
 
-try:
-    from playwright.sync_api import sync_playwright
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
+PLAYWRIGHT_AVAILABLE = None  # Lazy import - don't load at startup
 
-# Thread pool for running Playwright in async contexts
-# Single worker for 512MB RAM - can't run multiple browsers simultaneously
-_playwright_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+def _check_playwright():
+    """Lazy check for Playwright availability."""
+    global PLAYWRIGHT_AVAILABLE
+    if PLAYWRIGHT_AVAILABLE is None:
+        try:
+            from playwright.sync_api import sync_playwright
+            PLAYWRIGHT_AVAILABLE = True
+        except ImportError:
+            PLAYWRIGHT_AVAILABLE = False
+    return PLAYWRIGHT_AVAILABLE
+
+
+def cache_audio(audio_url):
+    """Cache audio by calling the TTS endpoint."""
+    try:
+        requests.get(audio_url, timeout=10)
+    except Exception as e:
+        pass
+
+
+def cache_stroke_gif(app_url: str, character: str, order: int):
+    """Cache stroke GIF by calling the stroke API endpoint."""
+    try:
+        url = f"{app_url}/api/stroke?hanzi={character}&order={order}"
+        requests.get(url, timeout=10)
+    except Exception:
+        pass
 
 
 tone_colors = {
@@ -189,13 +208,6 @@ def convert_hanzi_to_styled(hanzi_html):
     return str(soup).strip()
 
 
-def cache_audio(audio_url):
-    try:
-        requests.get(audio_url, timeout=5)
-    except Exception as e:
-        print(f"Error caching audio: {e}")
-
-
 def get_deepseek_chinese_sentences(deepseek_api_key: str, chinese_word: str) -> List[Dict]:
     """
     Get 3 AI-generated example sentences from DeepSeek API.
@@ -285,15 +297,15 @@ class ScrapingService:
     
     def _get_playwright(self):
         """Get a fresh playwright instance (for memory efficiency - don't persist)"""
-        if not PLAYWRIGHT_AVAILABLE:
+        if not _check_playwright():
             print("Playwright not available (not installed)")
             return None, None
         try:
+            from playwright.sync_api import sync_playwright
             playwright = sync_playwright().start()
             # Memory-optimized launch args for 512MB RAM
             browser = playwright.chromium.launch(
                 headless=True,
-                # Aggressive memory limits for 512MB environment
                 handle_sigint=False,
                 handle_sigterm=False,
                 handle_sighup=False,
@@ -303,8 +315,8 @@ class ScrapingService:
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
                     '--disable-software-rasterizer',
-                    '--single-process',  # Critical for low memory
-                    '--no-zygote',  # No child processes
+                    '--single-process',
+                    '--no-zygote',
                     '--no-first-run',
                     '--no-default-browser-check',
                     '--disable-extensions',
@@ -318,7 +330,7 @@ class ScrapingService:
                     '--disable-renderer-backgrounding',
                     '--force-color-profile=srgb',
                     '--memory-model=low',
-                    '--max_old_space_size=64',  # Very small JS heap (64MB)
+                    '--max_old_space_size=64',
                     '--js-flags=--max-old-space-size=64,--jitless',
                     '--disable-javascript-harmony-shipping',
                     '--disable-site-isolation-trials'
@@ -365,7 +377,6 @@ class ScrapingService:
                     pinyin, styled_term = style_scraped_pinyin(raw_pinyin, term)
                     
                     audio_url = f"{tts_api_url}?hanzi={quote(term)}"
-                    threading.Thread(target=cache_audio, args=(audio_url,)).start()
                     
                     traditional = ''
                     tail = entry.find('td', class_='tail')
@@ -395,7 +406,7 @@ class ScrapingService:
 
     def _scrape_writtenchinese_sync(self, character: str) -> Tuple[str, List[str]]:
         """Synchronous implementation of Written Chinese scraping."""
-        if not PLAYWRIGHT_AVAILABLE:
+        if not _check_playwright():
             print("Playwright not available, skipping WrittenChinese")
             return "", []
         
@@ -419,7 +430,7 @@ class ScrapingService:
             )
             page = context.new_page()
             
-            # Very short timeout for 512MB environment
+            # Standard timeout
             page.set_default_timeout(30000)
             
             # Go to Written Chinese dictionary
@@ -428,7 +439,7 @@ class ScrapingService:
             # Search for the character
             page.fill('#searchKey', character)
             page.press('#searchKey', 'Enter')
-            page.wait_for_timeout(1000)  # Reduced wait
+            page.wait_for_timeout(1500)  # Wait for results
             
             # Look for "Learn more" link
             links = page.query_selector_all('a.learn-more-link')
@@ -445,7 +456,7 @@ class ScrapingService:
             
             # Navigate to word detail page
             page.goto(f'https://dictionary.writtenchinese.com/{worddetail_href}', wait_until='domcontentloaded', timeout=30000)
-            page.wait_for_timeout(1000)  # Reduced wait
+            page.wait_for_timeout(800)  # Reduced wait
             
             # Extract stroke order GIFs from symbol-layer
             try:
@@ -526,19 +537,10 @@ class ScrapingService:
     def scrape_writtenchinese(self, character: str) -> Tuple[str, List[str]]:
         """
         Scrape stroke order GIFs from Written Chinese dictionary.
-        Handles both sync and async contexts.
+        Runs synchronously to avoid memory overhead from threading.
         Returns: (meaning, stroke_order_urls)
         """
-        # Check if we're in an async context
-        try:
-            asyncio.get_running_loop()
-            # We're in an async context - run in thread pool
-            future = _playwright_executor.submit(self._scrape_writtenchinese_sync, character)
-            # Timeout for 512MB RAM environment (60 seconds)
-            return future.result(timeout=60)
-        except RuntimeError:
-            # No running loop - run directly
-            return self._scrape_writtenchinese_sync(character)
+        return self._scrape_writtenchinese_sync(character)
 
     def scrape_word_details(self, character: str, progress_callback=None) -> Tuple:
         """
@@ -665,9 +667,6 @@ class ScrapingService:
 </div>'''
                             ai_examples.append(html)
                             
-                        # Trigger audio caching
-                        for item in deepseek_results:
-                            threading.Thread(target=cache_audio, args=(item['audio_url'],)).start()
                 except Exception as e:
                     print(f"Error generating AI examples: {e}")
                     traceback.print_exc()
@@ -692,8 +691,6 @@ class ScrapingService:
 <div style="font-size: 16px; margin-top: 10px;">{result['definition']}</div>
 </div>'''
                 anki_usage_examples_parts.append(html)
-                # Trigger audio caching for this term
-                threading.Thread(target=cache_audio, args=(audio_url,)).start()
             
             anki_usage_examples_str = ''.join(anki_usage_examples_parts)
             
@@ -706,6 +703,32 @@ class ScrapingService:
             reading = ""
             
             report("done", f"✅ {character} complete!")
+            
+            # Cache audio and stroke GIFs in background after returning
+            # This is done after scraping so it doesn't slow down the user
+            try:
+                def _delayed_cache():
+                    # Cache main word audio
+                    cache_audio(results[0]["audio_url"])
+                    
+                    # Cache stroke GIFs for each character
+                    if results[0].get("stroke_order"):
+                        for char in character:
+                            for order in range(1, 8):
+                                cache_stroke_gif(app_url, char, order)
+                    
+                    # Cache example sentence audio
+                    for item in deepseek_results:
+                        if item.get('audio_url'):
+                            cache_audio(item['audio_url'])
+                    
+                    # Cache anki usage examples audio
+                    for result in results[1:6]:
+                        cache_audio(f"{tts_api_url}?hanzi={quote(result['term'])}")
+                
+                threading.Thread(target=_delayed_cache, daemon=True).start()
+            except Exception:
+                pass
             
             # Return format matching old app exactly:
             # (pinyin, definition, stroke_order, audio_url, example_link, exemplary_image, 
