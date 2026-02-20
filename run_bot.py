@@ -16,6 +16,7 @@ Required Environment Variables:
 import os
 import sys
 import logging
+import asyncio
 
 # Setup logging first
 logging.basicConfig(
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Load dotenv
+from dotenv import load_dotenv
+load_dotenv()
 
 def check_environment():
     """Check required environment variables."""
@@ -62,6 +67,11 @@ def main():
     
     if not check_environment():
         sys.exit(1)
+    
+    # Initialize Flask app for database access
+    from app import app as flask_app
+    from src.models.database import db
+    db.init_app(flask_app)
     
     # Import here after env check
     try:

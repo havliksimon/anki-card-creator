@@ -187,6 +187,20 @@ class Database:
             conn.close()
             return {"word_count": count}
     
+    def get_all_words(self) -> List[Dict]:
+        """Get all words from database (for admin operations)."""
+        if self._client:
+            response = self._client.get("/words?select=*&order=created_at.desc")
+            return response.json()
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            c.execute("SELECT * FROM words ORDER BY created_at DESC")
+            rows = c.fetchall()
+            conn.close()
+            # Need to get column names
+            return []
+    
     def create_user(self, user_id: str, email: str, password_hash: str, 
                     telegram_id: str = None, telegram_username: str = None,
                     is_active: bool = False, is_admin: bool = False) -> bool:
@@ -339,6 +353,23 @@ class Database:
             conn.commit()
             conn.close()
             return word_id
+    
+    def update_word(self, word_id: int, updates: Dict) -> bool:
+        """Update a word."""
+        serialized_updates = {k: self._serialize_for_json(v) for k, v in updates.items()}
+        
+        if self._client:
+            response = self._client.patch(f"/words?id=eq.{word_id}", json=serialized_updates)
+            return response.status_code == 204
+        else:
+            conn = sqlite3.connect(self._local_db_path)
+            c = conn.cursor()
+            set_clause = ", ".join([f"{k} = ?" for k in serialized_updates.keys()])
+            values = list(serialized_updates.values()) + [word_id]
+            c.execute(f"UPDATE words SET {set_clause} WHERE id = ?", values)
+            conn.commit()
+            conn.close()
+            return True
     
     def delete_word(self, word_id: int, user_id: str, deck_id: str = None) -> bool:
         """Delete a word."""

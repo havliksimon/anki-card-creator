@@ -81,6 +81,9 @@ class DictionaryService:
         output = io.StringIO()
         writer = csv.writer(output)
         
+        # NO HEADER - matches old app exactly
+        # (Old app commented out the header line)
+        
         # Process each word exactly like the old app
         for word in words:
             character = word.get('character', '')
@@ -113,7 +116,20 @@ class DictionaryService:
             # Pad to ensure all 6 columns are present
             stroke_order_fields += [''] * (6 - len(stroke_order_fields))
             
-            # CSV row format matches old app exactly
+            # Get APP_URL for stroke order GIF URLs
+            app_url = os.environ.get('APP_URL', 'https://cardcreator.havliksimon.eu')
+            
+            # Full URLs for stroke order GIFs
+            full_stroke_urls = []
+            for url in stroke_order_fields:
+                if url and 'dictionary.writtenchinese.com' in url:
+                    # Convert relative URL to full URL
+                    full_url = url.replace('https://dictionary.writtenchinese.com', app_url)
+                    full_stroke_urls.append(full_url)
+                else:
+                    full_stroke_urls.append(url)
+            
+            # CSV row format with APP_URL field before StrokeOrder fields
             csv_row = [
                 character,
                 styled_term,
@@ -128,7 +144,7 @@ class DictionaryService:
                 component1,
                 component2,
                 real_usage_examples
-            ] + stroke_order_fields
+            ] + full_stroke_urls
             
             writer.writerow(csv_row)
         

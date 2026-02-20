@@ -30,9 +30,20 @@ def set_local_cache(key, value):
 @api_bp.route('/tts', methods=['GET'])
 def tts_api():
     """Text-to-speech endpoint. Returns MP3 audio for Chinese text."""
-    hanzi = request.args.get('hanzi')
+    hanzi = request.args.get('hanzi', '')
+    
+    # Validate input - only allow Chinese characters
     if not hanzi:
         return jsonify({'error': 'Missing hanzi parameter'}), 400
+    
+    # Limit length to prevent abuse
+    if len(hanzi) > 50:
+        return jsonify({'error': 'Text too long (max 50 characters)'}), 400
+    
+    # Only allow Chinese characters (and common punctuation)
+    import re
+    if not re.match(r'^[\u4e00-\u9fff\s,，.。!?！?]+$', hanzi):
+        return jsonify({'error': 'Only Chinese characters allowed'}), 400
     
     cache_key = f"tts:{hanzi}"
     
@@ -95,8 +106,17 @@ def tts_api():
 @api_bp.route('/tts-url/<hanzi>')
 def tts_url(hanzi):
     """Get direct URL to TTS audio (for Anki cards)."""
+    import re
+    
     if not hanzi:
         return jsonify({'error': 'Missing hanzi parameter'}), 400
+    
+    # Validate - only Chinese characters
+    if len(hanzi) > 50:
+        return jsonify({'error': 'Text too long'}), 400
+    
+    if not re.match(r'^[\u4e00-\u9fff\s,，.。!?！?]+$', hanzi):
+        return jsonify({'error': 'Only Chinese characters allowed'}), 400
     
     # Priority 1: Check if exists in R2
     if r2_storage.is_available():
@@ -122,11 +142,20 @@ def tts_url(hanzi):
 @api_bp.route('/stroke', methods=['GET'])
 def stroke_api():
     """Stroke order GIF endpoint."""
-    hanzi = request.args.get('hanzi')
+    hanzi = request.args.get('hanzi', '')
     order = request.args.get('order', default=1, type=int)
     
+    # Validate input
     if not hanzi:
         return jsonify({'error': 'Missing hanzi parameter'}), 400
+    
+    # Only allow single Chinese character
+    if len(hanzi) != 1:
+        return jsonify({'error': 'Only single character allowed'}), 400
+    
+    # Validate order is in reasonable range
+    if order < 1 or order > 20:
+        return jsonify({'error': 'Invalid stroke order (1-20)'}), 400
     
     cache_key = f"stroke:{hanzi}:{order}"
     
@@ -164,8 +193,21 @@ def stroke_api():
 @api_bp.route('/stroke-url/<character>/<int:order>')
 def stroke_url(character, order):
     """Get direct URL to stroke GIF."""
+    import re
+    
     if not character:
         return jsonify({'error': 'Missing character parameter'}), 400
+    
+    # Validate character
+    if len(character) != 1:
+        return jsonify({'error': 'Only single character allowed'}), 400
+    
+    if not re.match(r'^[\u4e00-\u9fff]$', character):
+        return jsonify({'error': 'Only Chinese characters allowed'}), 400
+    
+    # Validate order
+    if order < 1 or order > 20:
+        return jsonify({'error': 'Invalid stroke order (1-20)'}), 400
     
     # Priority 1: Check if exists in R2
     if r2_storage.is_available():

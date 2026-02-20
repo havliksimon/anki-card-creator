@@ -85,11 +85,13 @@ class TelegramBotService:
         self.application.add_handler(CommandHandler("csv", self.cmd_export))
         self.application.add_handler(CommandHandler("export", self.cmd_export))
         self.application.add_handler(CommandHandler("e", self.cmd_export))
+        self.application.add_handler(CommandHandler("oldexport", self.cmd_oldexport))
         
         # Deck management
-        self.application.add_handler(CommandHandler("list", self.cmd_list))
-        self.application.add_handler(CommandHandler("l", self.cmd_list))
-        self.application.add_handler(CommandHandler("chosedict", self.cmd_chosedict))
+        self.application.add_handler(CommandHandler("list", self._show_deck_list_handler))
+        self.application.add_handler(CommandHandler("l", self._show_deck_list_handler))
+        self.application.add_handler(CommandHandler("chosedict", self.cmd_chosedeck))
+        self.application.add_handler(CommandHandler("chosedeck", self.cmd_chosedeck))
         
         # Word management
         self.application.add_handler(CommandHandler("rmdict", self.cmd_rmdict))
@@ -105,6 +107,10 @@ class TelegramBotService:
         self.application.add_handler(CommandHandler("stats", self.cmd_stats))
         self.application.add_handler(CommandHandler("wipedict", self.cmd_wipedict))
         self.application.add_handler(CommandHandler("refresh", self.cmd_refresh))
+        self.application.add_handler(CommandHandler("listall", self.cmd_listall))
+        self.application.add_handler(CommandHandler("pending", self.cmd_pending))
+        self.application.add_handler(CommandHandler("approve", self.cmd_approve))
+        self.application.add_handler(CommandHandler("deny", self.cmd_deny))
         
         # Callback handlers for inline keyboards
         self.application.add_handler(CallbackQueryHandler(self.callback_handler, pattern="^"))
@@ -118,6 +124,54 @@ class TelegramBotService:
     def _get_user_by_telegram(self, telegram_id: str) -> Optional[Dict]:
         """Get user by Telegram ID."""
         return db.get_user_by_telegram_id(str(telegram_id))
+    
+    def _get_current_deck_id(self, context) -> Optional[str]:
+        """Get current deck ID from context, or return None if using main deck."""
+        deck_id = context.user_data.get('current_deck')
+        if deck_id:
+            return str(deck_id)
+        return None
+    
+    def _get_all_decks(self) -> List[Dict]:
+        """Get all decks from database with word counts."""
+        # Get all words and count by user_id
+        try:
+            all_words = db.get_all_words()
+        except:
+            all_words = []
+        
+        if not all_words:
+            return []
+        
+        # Count words per user_id
+        deck_counts = {}
+        for word in all_words:
+            if not word:
+                continue
+            uid = word.get('user_id')
+            if uid:
+                deck_counts[uid] = deck_counts.get(uid, 0) + 1
+        
+        # Get users for admin status
+        try:
+            users = db.get_users()
+        except:
+            users = []
+        
+        # Build deck list
+        decks = []
+        for uid, count in deck_counts.items():
+            user = next((u for u in users if u.get('id') == uid), None)
+            is_admin = user.get('is_admin') if user else False
+            decks.append({
+                'id': uid,
+                'word_count': count,
+                'is_admin': is_admin
+            })
+        
+        # Sort by word count descending
+        decks.sort(key=lambda x: x['word_count'], reverse=True)
+        return decks
     
     def _get_or_create_user(self, telegram_id: str, username: str = None) -> Tuple[Dict, bool]:
         """Get existing user or create new one. Returns (user_data, is_new)."""
@@ -326,11 +380,14 @@ class TelegramBotService:
             await update.message.reply_text("⏳ Your account is pending approval.")
             return
         
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
         # Get page number from args
         args = context.args
         page = int(args[0]) if args and args[0].isdigit() else 1
         
-        words = db.get_words_by_user(user_data['id'])
+        words = db.get_words_by_user(deck_id)
         text = self._format_word_list(words, page=page)
         
         await update.message.reply_text(text)
@@ -348,13 +405,18 @@ class TelegramBotService:
             await update.message.reply_text("⏳ Your account is pending approval.")
             return
         
-        stats = db.get_user_stats(user_data['id'])
-        words = db.get_words_by_user(user_data['id'])
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
+        stats = db.get_user_stats(deck_id)
+        words = db.get_words_by_user(deck_id)
+        
+        current_marker = "" if deck_id == user_data['id'] else f" (Deck: {deck_id[:12]}...)"
         
         info_text = (
-            f"📊 *Your Dictionary Stats*\n\n"
+            f"📊 *Your Dictionary Stats*{current_marker}\n\n"
             f"Total Words: {len(words)}\n"
-            f"User ID: `{user_data['id'][:8]}...`\n\n"
+            f"User ID: `{deck_id[:8]}...`\n\n"
             "Keep adding words to build your vocabulary!"
         )
         await update.message.reply_text(info_text, parse_mode='Markdown')
@@ -372,23 +434,119 @@ class TelegramBotService:
             await update.message.reply_text("⏳ Your account is pending approval.")
             return
         
-        words = db.get_words_by_user(user_data['id'])
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
+        words = db.get_words_by_user(deck_id)
         if not words:
             await update.message.reply_text(
-                "📚 Your dictionary is empty!\n\n"
+                "📚 This deck is empty!\n\n"
                 "Send me some Chinese text first to add words."
             )
             return
         
         # Generate CSV
-        csv_data = self._export_to_csv(user_data['id'])
+        csv_data = self._export_to_csv(deck_id)
+        
+        deck_name = f"_{deck_id[:8]}" if deck_id != user_data['id'] else ""
         
         # Send file
         await update.message.reply_document(
             document=csv_data,
-            filename=f"anki_dictionary_{user.id}.csv",
+            filename=f"anki_dictionary_{user.id}{deck_name}.csv",
             caption=(
                 f"📥 Your dictionary ({len(words)} words)\n\n"
+                "Import this CSV into Anki:\n"
+                "1. Set Field separator to 'Comma'\n"
+                "2. Enable 'Allow HTML'\n"
+                "3. Choose your deck and import!"
+            )
+        )
+    
+    async def cmd_oldexport(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /oldexport command - old format without APP_URL prefix."""
+        user = update.effective_user
+        user_data = self._get_user_by_telegram(str(user.id))
+        
+        if not user_data:
+            await update.message.reply_text("❌ Please use /start first.")
+            return
+        
+        if not user_data.get('is_active'):
+            await update.message.reply_text("⏳ Your account is pending approval.")
+            return
+        
+        # Get current deck or use main user deck
+        deck_id = self._get_current_deck_id(context) or user_data['id']
+        
+        words = db.get_words_by_user(deck_id)
+        if not words:
+            await update.message.reply_text(
+                "📚 This deck is empty!\n\n"
+                "Send me some Chinese text first to add words."
+            )
+            return
+        
+        # Generate CSV using old format (no APP_URL prefix)
+        import os
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        for word in words:
+            character = word.get('character', '')
+            styled_term = word.get('styled_term', '')
+            pinyin = word.get('pinyin', '')
+            translation = word.get('translation', '')
+            meaning = word.get('meaning', '')
+            
+            pronunciation = word.get('pronunciation', '')
+            if not pronunciation or '212.227.211.88' in pronunciation:
+                pronunciation = dictionary_service._get_pronunciation_url(character)
+            
+            example_link = word.get('example_link', '')
+            exemplary_image = word.get('exemplary_image', '')
+            example_usage = word.get('real_usage_examples', '') or word.get('anki_usage_examples', '')
+            reading = word.get('reading', '')
+            component1 = word.get('component1', '')
+            component2 = word.get('component2', '')
+            real_usage_examples = word.get('real_usage_examples', '')
+            
+            stroke_gifs = word.get('stroke_gifs', '')
+            stroke_order_list = stroke_gifs.split(", ") if stroke_gifs else []
+            stroke_order_fields = stroke_order_list[:6]
+            stroke_order_fields += [''] * (6 - len(stroke_order_fields))
+            
+            # Old format - no APP_URL prefix
+            csv_row = [
+                character,
+                styled_term,
+                pinyin,
+                translation,
+                meaning,
+                pronunciation,
+                example_link,
+                exemplary_image,
+                example_usage,
+                reading,
+                component1,
+                component2,
+                real_usage_examples
+            ] + stroke_order_fields
+            
+            writer.writerow(csv_row)
+        
+        csv_data = output.getvalue().encode('utf-8')
+        
+        deck_name = f"_{deck_id[:8]}" if deck_id != user_data['id'] else ""
+        
+        await update.message.reply_document(
+            document=csv_data,
+            filename=f"anki_dictionary_{user.id}{deck_name}.csv",
+            caption=(
+                f"📥 Your dictionary - OLD FORMAT ({len(words)} words)\n\n"
                 "Import this CSV into Anki:\n"
                 "1. Set Field separator to 'Comma'\n"
                 "2. Enable 'Allow HTML'\n"
@@ -414,7 +572,7 @@ class TelegramBotService:
         )
         await update.message.reply_text(text, parse_mode='Markdown')
     
-    async def cmd_chosedict(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_chosedeck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /chosedict command."""
         user = update.effective_user
         user_data = self._get_user_by_telegram(str(user.id))
@@ -426,11 +584,17 @@ class TelegramBotService:
         args = context.args
         if not args:
             await update.message.reply_text(
-                "Usage: /chosedict [deck_number]\n\n"
-                "Example: /chosedict 1\n\n"
+                "Usage: /chosedeck [deck_number]\n\n"
+                "Example: /chosedeck 1\n\n"
                 "This switches you to a different vocabulary deck.\n"
-                "If the deck doesn't exist, it will be created."
+                "If the deck doesn't exist, it will be created.\n\n"
+                "Tip: Just use /l to see all decks and click to select."
             )
+            return
+        
+        # If no args, show deck list with inline keyboard
+        if not args:
+            await self._show_deck_list(update, context)
             return
         
         try:
@@ -442,13 +606,58 @@ class TelegramBotService:
             return
         
         # Store deck preference in context
-        context.user_data['current_deck'] = deck_num
+        context.user_data['current_deck'] = str(deck_num)
         
         await update.message.reply_text(
             f"✅ Switched to Deck {deck_num}.\n\n"
             f"New words will be added to this deck.\n"
             f"Use /dictionary to see words in this deck."
         )
+    
+    async def _show_deck_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show list of decks with inline keyboard selection."""
+        user = update.effective_user
+        user_data = self._get_user_by_telegram(str(user.id))
+        
+        if not user_data:
+            await update.message.reply_text("❌ Please use /start first.")
+            return
+        
+        # Get all decks
+        decks = self._get_all_decks()
+        
+        if not decks:
+            await update.message.reply_text("No decks found.")
+            return
+        
+        current_deck = self._get_current_deck_id(context)
+        
+        keyboard = []
+        message_text = "📚 *Your Decks*\n\n"
+        
+        for deck in decks:
+            deck_id = deck['id']
+            count = deck['word_count']
+            
+            # Check if this is the current deck
+            is_current = (current_deck == deck_id) or (current_deck is None and deck_id == user_data['id'])
+            marker = "🎯 " if is_current else ""
+            
+            button_label = f"{marker}Deck {deck_id[:12]}... ({count} words)"
+            
+            keyboard.append([InlineKeyboardButton(button_label, callback_data=f"switch_deck_{deck_id}")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            message_text,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    
+    async def _show_deck_list_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handler for /l command to show deck list."""
+        await self._show_deck_list(update, context)
     
     async def cmd_rmdict(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /rmdict command."""
@@ -604,6 +813,10 @@ class TelegramBotService:
         admin_text = (
             "🔧 *Admin Menu*\n\n"
             "/stats - System statistics\n"
+            "/listall - List all users and decks\n"
+            "/pending - Show pending approvals\n"
+            "/approve [user_id] - Approve a user\n"
+            "/deny [user_id] - Remove pending user\n"
             "/wipedict [user_id] - Wipe user deck\n"
             "/refresh [word] - Refresh word data\n"
             "/admin - Show this menu"
@@ -682,6 +895,126 @@ class TelegramBotService:
             logger.error(f"Error refreshing word {word}: {e}")
             await status_msg.edit_text(f"❌ Error refreshing {word}: {str(e)}")
     
+    async def cmd_listall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /listall command - list all users and their decks (admin only)."""
+        user = update.effective_user
+        
+        if not self._is_admin(user.id):
+            await update.message.reply_text("🚫 Access denied.")
+            return
+        
+        users = db.get_users()
+        
+        if not users:
+            await update.message.reply_text("No users found.")
+            return
+        
+        text = "👥 *All Users and Their Decks*\n\n"
+        
+        for u in users:
+            user_id = u.get('id', '')[:12] + '...'
+            telegram_id = u.get('telegram_id', 'N/A')
+            username = u.get('telegram_username', 'N/A')
+            is_active = "✅" if u.get('is_active') else "⏳"
+            is_admin = "🔧" if u.get('is_admin') else ""
+            
+            # Get word count for this user
+            try:
+                words = db.get_words_by_user(u.get('id'))
+                word_count = len(words)
+            except:
+                word_count = 0
+            
+            text += f"{is_active} {is_admin} `{telegram_id}`\n"
+            text += f"   Words: {word_count}\n"
+            if username and username != 'N/A':
+                text += f"   @{username}\n"
+            text += "\n"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_pending(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /pending command - show pending users (admin only)."""
+        user = update.effective_user
+        
+        if not self._is_admin(user.id):
+            await update.message.reply_text("🚫 Access denied.")
+            return
+        
+        pending = db.get_pending_approvals()
+        
+        if not pending:
+            await update.message.reply_text("✅ No pending approvals.")
+            return
+        
+        text = "⏳ *Pending Approvals*\n\n"
+        
+        for p in pending:
+            user_id = p.get('user_id', '')[:12] + '...'
+            telegram_id = p.get('telegram_id', 'N/A')
+            username = p.get('telegram_username', 'N/A')
+            requested = p.get('requested_at', 'N/A')
+            
+            text += f"📋 `{telegram_id}`\n"
+            if username and username != 'N/A':
+                text += f"   @{username}\n"
+            text += f"   ID: `{user_id}`\n"
+            text += f"   Use /approve {p.get('user_id', '')}\n\n"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_approve(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /approve command - approve a user (admin only)."""
+        user = update.effective_user
+        
+        if not self._is_admin(user.id):
+            await update.message.reply_text("🚫 Access denied.")
+            return
+        
+        args = context.args
+        if not args:
+            await update.message.reply_text(
+                "Usage: /approve [user_id]\n\n"
+                "Get user_id from /pending command"
+            )
+            return
+        
+        target_user_id = args[0]
+        
+        # Activate the user
+        success = db.update_user(target_user_id, {'is_active': True})
+        
+        if success:
+            # Remove from pending
+            db.remove_pending_approval(target_user_id)
+            await update.message.reply_text(f"✅ User {target_user_id[:12]}... approved!")
+        else:
+            await update.message.reply_text(f"❌ User not found.")
+    
+    async def cmd_deny(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /deny command - deny/remove a pending user (admin only)."""
+        user = update.effective_user
+        
+        if not self._is_admin(user.id):
+            await update.message.reply_text("🚫 Access denied.")
+            return
+        
+        args = context.args
+        if not args:
+            await update.message.reply_text(
+                "Usage: /deny [user_id]\n\n"
+                "This will remove the user from pending list."
+            )
+            return
+        
+        target_user_id = args[0]
+        
+        # Remove from pending
+        db.remove_pending_approval(target_user_id)
+        
+        # Optionally could also delete the user entirely
+        await update.message.reply_text(f"❌ User {target_user_id[:12]}... removed from pending.")
+    
     # ==================== Message Handlers ====================
     
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -712,7 +1045,7 @@ class TelegramBotService:
             )
             return
         
-        # Check for existing words
+        # Check for existing words in user's dictionary
         words = db.get_words_by_user(user_data['id'])
         existing_chars = {w['character'] for w in words}
         
@@ -726,6 +1059,21 @@ class TelegramBotService:
             )
             return
         
+        # Check if words exist in other users' dictionaries (global lookup)
+        # If so, copy them instead of scraping again
+        global_words = {}
+        all_users = db.get_users()
+        for other_user in all_users:
+            if other_user['id'] != user_data['id']:
+                other_words = db.get_words_by_user(other_user['id'])
+                for w in other_words:
+                    if w['character'] in new_words and w['character'] not in global_words:
+                        global_words[w['character']] = w
+        
+        # Words to scrape (not in any user's dictionary)
+        words_to_scrape = [w for w in new_words if w not in global_words]
+        words_to_copy = [w for w in new_words if w in global_words]
+        
         # Process words
         status_message = await update.message.reply_text(
             f"⏳ Processing {len(new_words)} new words...\n"
@@ -737,8 +1085,10 @@ class TelegramBotService:
         
         for i, word_text in enumerate(new_words):
             try:
-                # Create progress callback for this word
-                async def progress_callback(stage: str, message: str):
+                # Create progress callback for this word (sync wrapper for async edit_text)
+                import asyncio
+                
+                async def edit_progress(stage: str, message: str):
                     try:
                         progress_text = (
                             f"⏳ Processing {i+1}/{len(new_words)}: {word_text}\n"
@@ -748,8 +1098,12 @@ class TelegramBotService:
                     except:
                         pass
                 
+                def progress_callback(stage: str, message: str):
+                    # Schedule the async call
+                    asyncio.create_task(edit_progress(stage, message))
+                
                 # Update status to show current progress
-                await progress_callback("start", f"🔄 Starting scrape for {word_text}...")
+                asyncio.create_task(edit_progress("start", f"🔄 Starting scrape for {word_text}..."))
                 
                 word_details = dictionary_service.get_word_details(word_text, progress_callback)
                 word_details['user_id'] = user_data['id']
@@ -828,6 +1182,20 @@ class TelegramBotService:
         
         elif data == "cancel_wipe":
             await query.edit_message_text("❌ Data deletion cancelled.")
+        
+        elif data.startswith("switch_deck_"):
+            deck_id = data.replace("switch_deck_", "")
+            context.user_data['current_deck'] = deck_id
+            
+            # Get word count for this deck
+            words = db.get_words_by_user(deck_id)
+            count = len(words)
+            
+            await query.edit_message_text(
+                f"✅ Switched to Deck {deck_id[:12]}...\n\n"
+                f"Words in this deck: {count}\n\n"
+                f"Use /dictionary, /export, etc. to work with this deck."
+            )
     
     # ==================== Run ====================
     
@@ -838,6 +1206,16 @@ class TelegramBotService:
             return
         
         logger.info("Starting Telegram bot...")
+        
+        # Create event loop for Python 3.10+ compatibility
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
