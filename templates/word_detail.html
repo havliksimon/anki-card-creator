@@ -3,13 +3,126 @@
 {% block title %}{{ word.character }} - {{ app_name }}{% endblock %}
 
 {% block content %}
+<style>
+.anki-card-preview {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+.anki-card-front, .anki-card-back {
+    padding: 20px;
+    min-height: 200px;
+}
+.anki-card-front {
+    background: #f5f5f5;
+    border-bottom: 2px solid #ddd;
+}
+.anki-card-back {
+    background: white;
+}
+.card-mode-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.5rem;
+}
+.card-mode-tabs button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+}
+.card-mode-tabs button.active {
+    background: var(--primary);
+    color: white;
+}
+.card-mode-content {
+    display: none;
+}
+.card-mode-content.active {
+    display: block;
+}
+.hanzi-display {
+    font-size: 72px;
+    text-align: center;
+    margin: 20px 0;
+    font-family: "Kaiti", "STKaiti", "楷体", "SimKaiti", serif;
+}
+.pinyin-display {
+    font-size: 24px;
+    text-align: center;
+    margin: 10px 0;
+}
+.translation-display {
+    font-size: 18px;
+    text-align: center;
+    color: #666;
+    margin: 10px 0;
+}
+.play-button {
+    display: block;
+    margin: 15px auto;
+    padding: 10px 30px;
+    font-size: 18px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+}
+.play-button:hover {
+    opacity: 0.9;
+}
+.stroke-order-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px 0;
+}
+.stroke-order-grid img {
+    width: 100px;
+    height: 100px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.example-sentence {
+    margin: 15px 0;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 8px;
+}
+.exemplary-image {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 15px 0;
+}
+.divider {
+    border: none;
+    border-top: 2px solid #ddd;
+    margin: 0;
+}
+.mode-label {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+</style>
+
 <div class="card">
-    <div class="card-header">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-            <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">{{ word.character }}</h1>
-            <p style="font-size: 1.25rem; color: var(--text-secondary);">{{ word.pinyin|safe }}</p>
+            <h1 style="font-size: 2rem; margin: 0;">{{ word.character }}</h1>
+            <p style="color: var(--text-secondary); margin: 0.25rem 0 0 0;">{{ word.pinyin|safe }}</p>
         </div>
-        <div style="display: flex; gap: 0.75rem;">
+        <div style="display: flex; gap: 0.5rem;">
             {% if word.pronunciation %}
                 <button onclick="document.getElementById('audio-main').play()" class="btn btn-secondary">
                     🔊 Play
@@ -22,56 +135,199 @@
             </form>
         </div>
     </div>
-    
-    {% if word.translation %}
-        <div style="margin-bottom: 1.5rem;">
-            <h3 style="color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase; margin-bottom: 0.5rem;">Translation</h3>
-            <p style="font-size: 1.1rem;">{{ word.translation }}</p>
-        </div>
-    {% endif %}
-    
-    {% if word.meaning %}
-        <div style="margin-bottom: 1.5rem;">
-            <h3 style="color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase; margin-bottom: 0.5rem;">Meaning</h3>
-            <p>{{ word.meaning }}</p>
-        </div>
-    {% endif %}
 </div>
 
-{% if word.exemplary_image %}
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Example Image</h3>
-        </div>
-        <img src="{{ word.exemplary_image }}" alt="{{ word.character }}" style="max-width: 100%; border-radius: var(--radius);">
+<!-- Card Mode Tabs -->
+<div class="card" style="margin-top: 1rem;">
+    <div class="card-mode-tabs">
+        <button class="active" onclick="showMode('vocabulary')">📚 Vocabulary</button>
+        <button onclick="showMode('writing')">✍️ Writing</button>
+        <button onclick="showMode('reading')">👁️ Reading</button>
+        <button onclick="showMode('full')">📋 Full Preview</button>
     </div>
-{% endif %}
-
-{% if word.anki_usage_examples %}
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Example Sentences</h3>
-        </div>
-        <div>{{ word.anki_usage_examples|safe }}</div>
-    </div>
-{% endif %}
-
-{% if word.stroke_gifs %}
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Stroke Order</h3>
-        </div>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-            {% for gif in word.stroke_gifs.split(', ') %}
-                {% if gif %}
-                    <img src="{{ gif }}" alt="Stroke {{ loop.index }}" style="max-width: 120px;">
+    
+    <!-- VOCABULARY MODE -->
+    <div id="mode-vocabulary" class="card-mode-content active">
+        <div class="mode-label">Anki Card: Vocabulary Mode</div>
+        <div class="anki-card-preview">
+            <div class="anki-card-front">
+                <div class="hanzi-display">{{ word.character }}</div>
+                <button class="play-button" onclick="playAudio()">🔊 Play Audio</button>
+            </div>
+            <div class="anki-card-back">
+                <div class="pinyin-display">{{ word.pinyin|safe }}</div>
+                <div class="translation-display"><strong>{{ word.translation }}</strong></div>
+                {% if word.meaning %}
+                    <div style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                        {{ word.meaning }}
+                    </div>
                 {% endif %}
-            {% endfor %}
+            </div>
         </div>
     </div>
-{% endif %}
+    
+    <!-- WRITING MODE -->
+    <div id="mode-writing" class="card-mode-content">
+        <div class="mode-label">Anki Card: Writing Mode</div>
+        <div class="anki-card-preview">
+            <div class="anki-card-front">
+                <div class="translation-display" style="font-size: 24px; margin-bottom: 20px;">{{ word.translation }}</div>
+                <div class="pinyin-display">{{ word.pinyin|safe }}</div>
+                <div style="text-align: center; color: #999; margin-top: 30px; font-size: 14px;">
+                    (Write the character from memory)
+                </div>
+            </div>
+            <div class="anki-card-back">
+                <div class="hanzi-display">{{ word.character }}</div>
+                {% if word.stroke_gifs %}
+                    <div class="stroke-order-grid">
+                        {% for gif in word.stroke_gifs.split(', ') %}
+                            {% if gif %}
+                                <img src="{{ gif }}" alt="Stroke {{ loop.index }}">
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- READING MODE -->
+    <div id="mode-reading" class="card-mode-content">
+        <div class="mode-label">Anki Card: Reading Mode</div>
+        <div class="anki-card-preview">
+            <div class="anki-card-front">
+                <div class="hanzi-display">{{ word.character }}</div>
+                <button class="play-button" onclick="playAudio()">🔊 Play Audio</button>
+            </div>
+            <div class="anki-card-back">
+                {% if word.anki_usage_examples %}
+                    <div>{{ word.anki_usage_examples|safe }}</div>
+                {% else %}
+                    <div style="text-align: center; color: #999; padding: 20px;">
+                        No example sentences available
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- FULL PREVIEW MODE -->
+    <div id="mode-full" class="card-mode-content">
+        <div class="mode-label">Complete Anki Card Preview</div>
+        <div class="anki-card-preview">
+            <!-- Front -->
+            <div class="anki-card-front">
+                <div class="hanzi-display">{{ word.character }}</div>
+                <button class="play-button" onclick="playAudio()">🔊 Play Audio</button>
+            </div>
+            
+            <hr class="divider">
+            
+            <!-- Back -->
+            <div class="anki-card-back">
+                <div class="pinyin-display">{{ word.pinyin|safe }}</div>
+                <div class="translation-display"><strong>{{ word.translation }}</strong></div>
+                
+                {% if word.exemplary_image %}
+                    <img src="{{ word.exemplary_image }}" alt="{{ word.character }}" class="exemplary-image">
+                {% endif %}
+                
+                {% if word.meaning %}
+                    <div style="margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+                        <strong>Meaning:</strong><br>
+                        {{ word.meaning }}
+                    </div>
+                {% endif %}
+                
+                {% if word.anki_usage_examples %}
+                    <div style="margin-top: 20px;">
+                        <h4 style="margin-bottom: 10px;">Example Sentences:</h4>
+                        {{ word.anki_usage_examples|safe }}
+                    </div>
+                {% endif %}
+                
+                {% if word.stroke_gifs %}
+                    <div style="margin-top: 20px;">
+                        <h4 style="margin-bottom: 10px;">Stroke Order:</h4>
+                        <div class="stroke-order-grid">
+                            {% for gif in word.stroke_gifs.split(', ') %}
+                                {% if gif %}
+                                    <img src="{{ gif }}" alt="Stroke {{ loop.index }}">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Word Data Card -->
+<div class="card" style="margin-top: 1rem;">
+    <div class="card-header">
+        <h3 class="card-title">Word Data</h3>
+    </div>
+    <table class="table">
+        <tr>
+            <td><strong>Character</strong></td>
+            <td>{{ word.character }}</td>
+        </tr>
+        <tr>
+            <td><strong>Pinyin</strong></td>
+            <td>{{ word.pinyin|safe }}</td>
+        </tr>
+        <tr>
+            <td><strong>Translation</strong></td>
+            <td>{{ word.translation }}</td>
+        </tr>
+        {% if word.styled_term %}
+        <tr>
+            <td><strong>Styled Term</strong></td>
+            <td>{{ word.styled_term|safe }}</td>
+        </tr>
+        {% endif %}
+        {% if word.pronunciation %}
+        <tr>
+            <td><strong>Audio</strong></td>
+            <td><a href="{{ word.pronunciation }}" target="_blank">{{ word.pronunciation[:60] }}...</a></td>
+        </tr>
+        {% endif %}
+        {% if word.exemplary_image %}
+        <tr>
+            <td><strong>Image URL</strong></td>
+            <td><a href="{{ word.exemplary_image }}" target="_blank">{{ word.exemplary_image[:60] }}...</a></td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
 
 <div style="text-align: center; margin-top: 2rem;">
     <a href="{{ url_for('main.dictionary') }}" class="btn btn-secondary">← Back to Dictionary</a>
 </div>
+
+<script>
+function showMode(mode) {
+    // Hide all modes
+    document.querySelectorAll('.card-mode-content').forEach(el => {
+        el.classList.remove('active');
+    });
+    // Remove active from all buttons
+    document.querySelectorAll('.card-mode-tabs button').forEach(el => {
+        el.classList.remove('active');
+    });
+    // Show selected mode
+    document.getElementById('mode-' + mode).classList.add('active');
+    // Set active button
+    event.target.classList.add('active');
+}
+
+function playAudio() {
+    const audio = document.getElementById('audio-main');
+    if (audio) {
+        audio.play();
+    }
+}
+</script>
 {% endblock %}
